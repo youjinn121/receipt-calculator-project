@@ -1,3 +1,5 @@
+import json
+import os
 import math
 import re
 from copy import deepcopy
@@ -690,12 +692,10 @@ def refine_lines_vertical(receipts, thr_k_v=THR_K_VERT):
                 if is_tail_section_start_line(upper_line) or is_tail_section_start_line(lower_line):
                     tail_section_started = True
 
-            candidate_map = {}
             any_candidate_exists = False
 
             for uw in upper_line:
                 cands = [lw for lw in lower_line if x_overlap(uw, lw)]
-                candidate_map[uw["uid"]] = cands
                 if cands:
                     any_candidate_exists = True
 
@@ -927,12 +927,9 @@ def build_lines_structured(lines):
 
 def build_output_receipt(receipt):
     lines = receipt.get("lines", [])
-
     return {
         "source": receipt.get("file_name", ""),
-        "file_meta": receipt.get("file_meta", {}),
         "lines_structured": build_lines_structured(lines),
-        "cut_meta": receipt.get("cut_meta", {}),
     }
 
 
@@ -995,3 +992,59 @@ def parse_single_receipt_json(clova_json, file_name="receipt.json"):
     receipt = extract_receipt_words_from_json(clova_json, file_name=file_name)
     results = run_parser_engine([receipt])
     return results[0] if results else None
+
+
+# ============================================================
+# ✅ 폴더 로드 / 폴더 파싱 / 개별 저장
+# ============================================================
+def load_json_items_from_folder(folder_path):
+    json_items = []
+
+    if not os.path.isdir(folder_path):
+        raise FileNotFoundError(f"폴더를 찾을 수 없습니다: {folder_path}")
+
+    file_names = sorted(
+        [f for f in os.listdir(folder_path) if f.lower().endswith(".json")]
+    )
+
+    for file_name in file_names:
+        file_path = os.path.join(folder_path, file_name)
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        json_items.append({
+            "file_name": file_name,
+            "data": data
+        })
+
+    return json_items
+
+
+def parse_receipts_from_folder(folder_path):
+    json_items = load_json_items_from_folder(folder_path)
+    return parse_receipt_request(json_items)
+
+
+def save_each_receipt_result(results, output_folder):
+    os.makedirs(output_folder, exist_ok=True)
+
+    for item in results:
+        source_name = item["source"].replace(".json", "")
+        output_path = os.path.join(output_folder, f"{source_name}_parsed.json")
+
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(item, f, ensure_ascii=False, indent=2)
+
+
+# ============================================================
+# ✅ 바로 실행
+# ============================================================
+if __name__ == "__main__":
+    raw_json_folder = "./raw_json"
+    output_folder = "./parsed_output"
+
+    results = parse_receipts_from_folder(raw_json_folder)
+    save_each_receipt_result(results, output_folder)
+
+    print(f"완료: {output_folder}")
