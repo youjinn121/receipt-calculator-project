@@ -1,0 +1,120 @@
+{
+  "version": "1.0.0",
+  "description": "Mapping from Costco-specific store roles to common line types",
+  "reference": {
+    "common_line_types_file": "common/line_types.json",
+    "store_kb_scope": "costco"
+  },
+  "mapping_policy": {
+    "description": "All final parser outputs must use only common line_type values. store_role may be preserved as an auxiliary field.",
+    "preserve_store_role": true,
+    "unknown_role_fallback": "noise"
+  },
+  "store_role_to_common_line_type": [
+    {
+      "store_role": "item_name",
+      "common_line_type": "item_name",
+      "description": "상품명 라인"
+    },
+    {
+      "store_role": "item_detail",
+      "common_line_type": "item_detail",
+      "description": "상품 상세 라인"
+    },
+    {
+      "store_role": "discount_keyword",
+      "common_line_type": "discount_detail",
+      "description": "Costco 할인 블록 시작 키워드. common 체계에서는 discount_detail 계열로 정규화"
+    },
+    {
+      "store_role": "discount_target",
+      "common_line_type": "discount_detail",
+      "description": "할인 대상 상품명 라인. common 체계에서는 discount_detail 계열로 정규화"
+    },
+    {
+      "store_role": "discount_detail",
+      "common_line_type": "discount_detail",
+      "description": "실제 할인 금액 라인"
+    },
+    {
+      "store_role": "receipt_discount",
+      "common_line_type": "receipt_discount",
+      "description": "전역 쿠폰/영수증 단위 할인 라인"
+    },
+    {
+      "store_role": "subtotal",
+      "common_line_type": "subtotal",
+      "description": "상품수 소계, 총상품수 등 중간 합계 라인"
+    },
+    {
+      "store_role": "total",
+      "common_line_type": "total",
+      "description": "최종 결제 금액 라인"
+    },
+    {
+      "store_role": "noise",
+      "common_line_type": "noise",
+      "description": "헤더, 내부코드, 안내문 등 무시할 라인"
+    }
+  ],
+  "non_line_roles": [
+    {
+      "store_role": "merge_policy",
+      "reason": "라인 분류 대상이 아니라 semantic/UI 단계 정책"
+    },
+    {
+      "store_role": "normalization",
+      "reason": "line_type이 아니라 문자열/숫자 정규화 규칙"
+    },
+    {
+      "store_role": "code",
+      "reason": "라인 역할이 아니라 필드 패턴 규칙"
+    }
+  ],
+  "auxiliary_field_policy": {
+    "description": "Store-specific roles may be preserved in auxiliary fields for debugging and semantic handoff",
+    "recommended_fields": [
+      "store_role",
+      "discount_target_raw",
+      "discount_label_raw"
+    ],
+    "examples": [
+      {
+        "line_text": "CPN",
+        "store_role": "discount_keyword",
+        "common_line_type": "discount_detail",
+        "auxiliary": {
+          "discount_label_raw": "CPN"
+        }
+      },
+      {
+        "line_text": "유기농우유 IRC",
+        "store_role": "discount_target",
+        "common_line_type": "discount_detail",
+        "auxiliary": {
+          "discount_target_raw": "유기농우유 IRC"
+        }
+      }
+    ]
+  },
+  "mapping_notes": [
+    "Costco는 discount_keyword, discount_target, discount_detail이 분리되어 있지만 common line type 체계에서는 모두 discount_detail 계열로 정규화된다.",
+    "Parser는 store_role을 보존할 수 있지만, 최종 line_type은 반드시 common enum만 사용해야 한다.",
+    "discount_keyword와 discount_target은 semantic interpreter에서 할인 귀속을 위해 사용될 수 있으므로 raw text 보존이 중요하다."
+  ],
+  "fallback_rules": [
+    {
+      "condition": "store_role is unknown or missing",
+      "action": "map to noise"
+    },
+    {
+      "condition": "store_role is a known non-line policy role",
+      "action": "do not emit as line_type; handle in policy layer"
+    }
+  ],
+  "parser_requirements": [
+    "Do not expose store-specific roles as final line_type values.",
+    "Always map Costco-specific roles to common line types before final output packaging.",
+    "Preserve store_role when semantic interpretation may require finer-grained Costco context."
+  ]
+}

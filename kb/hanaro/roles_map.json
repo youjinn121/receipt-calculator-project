@@ -1,0 +1,118 @@
+{
+  "version": "1.0.0",
+  "description": "Mapping from Hanaro-specific store roles to common line types",
+  "reference": {
+    "common_line_types_file": "common/line_types.json",
+    "store_kb_scope": "hanaro"
+  },
+  "mapping_policy": {
+    "description": "All final parser outputs must use only common line_type values. store_role may be preserved as an auxiliary field.",
+    "preserve_store_role": true,
+    "unknown_role_fallback": "noise"
+  },
+  "store_role_to_common_line_type": [
+    {
+      "store_role": "item_name",
+      "common_line_type": "item_name",
+      "description": "상품명 라인"
+    },
+    {
+      "store_role": "item_detail",
+      "common_line_type": "item_detail",
+      "description": "상품 상세 라인"
+    },
+    {
+      "store_role": "discount_detail",
+      "common_line_type": "discount_detail",
+      "description": "상품 단위 할인 라인"
+    },
+    {
+      "store_role": "receipt_discount",
+      "common_line_type": "receipt_discount",
+      "description": "영수증 전체 할인 또는 집계 할인 라인"
+    },
+    {
+      "store_role": "subtotal",
+      "common_line_type": "subtotal",
+      "description": "중간 합계 또는 구매액 관련 라인"
+    },
+    {
+      "store_role": "total",
+      "common_line_type": "total",
+      "description": "최종 결제 금액 라인"
+    },
+    {
+      "store_role": "noise",
+      "common_line_type": "noise",
+      "description": "헤더, 설명성 문구 등 무시할 라인"
+    }
+  ],
+  "non_line_roles": [
+    {
+      "store_role": "dedupe_policy",
+      "reason": "라인 분류 대상이 아니라 중복 할인 제거 정책"
+    },
+    {
+      "store_role": "validation",
+      "reason": "라인 역할이 아니라 검증 규칙"
+    }
+  ],
+  "auxiliary_field_policy": {
+    "description": "Store-specific roles may be preserved in auxiliary fields for debugging and semantic/validation handoff",
+    "recommended_fields": [
+      "store_role",
+      "discount_label_raw",
+      "name_raw",
+      "code"
+    ],
+    "examples": [
+      {
+        "line_text": "삼겹 한돈자조금 할인 -1.369",
+        "store_role": "discount_detail",
+        "common_line_type": "discount_detail",
+        "auxiliary": {
+          "discount_label_raw": "삼겹 한돈자조금 할인"
+        }
+      },
+      {
+        "line_text": "끝전할인: -4",
+        "store_role": "receipt_discount",
+        "common_line_type": "receipt_discount"
+      },
+      {
+        "line_text": "총할인액: -4",
+        "store_role": "receipt_discount",
+        "common_line_type": "receipt_discount"
+      },
+      {
+        "line_text": "007 P뒷다리(일반) /냉동 [3,800]",
+        "store_role": "item_name",
+        "common_line_type": "item_name",
+        "auxiliary": {
+          "name_raw": "P뒷다리(일반) /냉동 [3,800]"
+        }
+      }
+    ]
+  },
+  "mapping_notes": [
+    "Hanaro는 item discount와 receipt_discount를 반드시 구분해야 한다.",
+    "총할인액, 쿠폰할인, 끝전할인, 할인쿠폰 계열은 receipt_discount로 유지한다.",
+    "discount_detail은 대부분 직전 상품에 귀속되지만 parser는 연결하지 않는다.",
+    "대괄호 태그가 포함된 상품명은 item_name으로 유지하고 raw text를 보존할 수 있다."
+  ],
+  "fallback_rules": [
+    {
+      "condition": "store_role is unknown or missing",
+      "action": "map to noise"
+    },
+    {
+      "condition": "store_role is a known non-line policy role such as dedupe_policy or validation",
+      "action": "do not emit as common line_type; handle in policy/validation layer"
+    }
+  ],
+  "parser_requirements": [
+    "Do not expose Hanaro-specific roles as final line_type values.",
+    "Always map Hanaro-specific roles to common line types before final output packaging.",
+    "Preserve store_role when semantic interpretation or validation may require finer-grained Hanaro context."
+  ]
+}

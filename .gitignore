@@ -205,3 +205,11 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+#--- [사용자 정의] 데이터셋 및 이미지 폴더 무시 ---
+raw_images/
+test_images/
+data/
+*.jpg
+*.png
+*.jpeg

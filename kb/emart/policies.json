@@ -1,0 +1,304 @@
+{
+  "version": "1.1.0",
+  "description": "Emart parser and semantic handling policies (production-ready)",
+  "policy_scope": [
+    "parser",
+    "semantic_interpreter",
+    "validation"
+  ],
+  "canonical_item_detail_fields": [
+    "code",
+    "qty",
+    "unit_price_raw",
+    "price_raw"
+  ],
+  "input_validity_policy": {
+    "description": "Guard rules to prevent accidental over-classification and role collision",
+    "rules": [
+      "A line matched by emart/discount_patterns.json must not be classified as item_detail or item_name.",
+      "A line matched by emart/summary_patterns.json must not be classified as item_detail or item_name.",
+      "A line matched by emart/noise_patterns.json header or seller-info patterns must not be classified as item_detail or item_name.",
+      "Single-line item patterns must be checked before generic item_name fallback.",
+      "Text-only lines may be item_name candidates only after detail, discount, summary, and noise checks fail."
+    ]
+  },
+  "code_policy": {
+    "description": "Emart item code handling rules",
+    "primary_code_format": {
+      "type": "barcode",
+      "length": 13
+    },
+    "allow_star_prefixed_code": true,
+    "allow_code_absence_in_single_line_item": true,
+    "notes": [
+      "이마트 상세라인의 상품 코드는 일반적으로 13자리 바코드",
+      "* prefix가 붙은 경우 normalization 후 code만 추출",
+      "single-line item 구조에서는 code가 없을 수 있으므로 optional field로 허용"
+    ]
+  },
+  "qty_policy": {
+    "description": "Quantity parsing and imputation rules",
+    "accepted_qty_formats": [
+      "explicit integer qty"
+    ],
+    "imputation": {
+      "enabled": true,
+      "default_qty": 1,
+      "apply_only_when": [
+        "line is already classified as item_detail",
+        "line matches 3-token transactional structure",
+        "code and amount fields are confidently extracted",
+        "line does not match discount_detail or receipt_discount structure"
+      ],
+      "examples": [
+        {
+          "input": "1500000018153 5,480 5,480",
+          "output": {
+            "qty": 1,
+            "is_imputed_qty": true
+          }
+        },
+        {
+          "input": "*8809205164010 4,820 4,820",
+          "output": {
+            "qty": 1,
+            "is_imputed_qty": true
+          }
+        }
+      ]
+    },
+    "notes": [
+      "qty=1 보정은 item_detail 패턴이 먼저 확정된 뒤에만 적용",
+      "텍스트 라인이나 할인 라인에는 적용하지 않음"
+    ]
+  },
+  "amount_policy": {
+    "description": "Amount normalization and casting rules for Emart",
+    "normalize_number_spacing": true,
+    "normalize_spaced_negative_amount": true,
+    "remove_commas_before_cast": true,
+    "preserve_negative_sign_until_role_is_determined": true,
+    "examples": [
+      {
+        "input": "1,450",
+        "casted": 1450
+      },
+      {
+        "input": "- 3,000",
+        "normalized": "-3,000"
+      },
+      {
+        "input": "-5,000",
+        "discount_raw": 5000
+      }
+    ],
+    "notes": [
+      "negative amount는 discount_detail일 수도 receipt_discount일 수도 있으므로 line_type 확정 전 의미를 고정하지 않음"
+    ]
+  },
+  "name_policy": {
+    "description": "Item name normalization rules",
+    "strip_item_number_prefix": true,
+    "strip_leading_star_prefix": true,
+    "strip_parenthesized_alpha_prefix": true,
+    "preserve_raw_name_text": true,
+    "examples": [
+      {
+        "input": "01 떡붕어싸만코",
+        "normalized_name": "떡붕어싸만코"
+      },
+      {
+        "input": "(J)무항생제볶음탕용",
+        "normalized_name": "무항생제볶음탕용"
+      },
+      {
+        "input": "* 01 (Ph)돌바나나(송이)",
+        "normalized_name": "돌바나나(송이)"
+      }
+    ],
+    "notes": [
+      "(J), (JN), (Ph) 같은 괄호 영문 prefix는 상품명 일부가 아니라 태그성 prefix로 본다",
+      "단, 원본 line_text는 반드시 보존한다"
+    ]
+  },
+  "line_classification_policy": {
+    "description": "Recommended order for Emart line classification",
+    "priority_order": [
+      "total",
+      "subtotal",
+      "receipt_discount",
+      "discount_detail",
+      "item_detail",
+      "item_name",
+      "noise"
+    ],
+    "rules": [
+      "single-line item_detail patterns must be checked before generic item_name rules",
+      "receipt_discount must win over discount_detail when ':' + reference code + negative amount structure exists",
+      "discount_detail must win over item_name when trailing negative amount exists",
+      "summary lines must win over generic noise",
+      "noise must be applied only as the final fallback"
+    ]
+  },
+  "single_line_item_policy": {
+    "description": "Handling rules for item name + detail merged into one line",
+    "enabled": true,
+    "parser_rules": [
+      "if a line matches single_line_item_patterns, classify it as item_detail",
+      "extract name_raw together with unit_price_raw, qty, and price_raw",
+      "code may be absent in this structure",
+      "do not classify lines with trailing negative amount as single-line items"
+    ],
+    "notes": [
+      "퍼실 딥클린 파워젤 26,980 3 80,940 같은 구조 허용",
+      "이 경우 parser 단계에서 name_raw를 함께 추출할 수 있음"
+    ]
+  },
+  "discount_policy": {
+    "description": "Emart item discount handling policy",
+    "parser_rules": [
+      "discount_detail lines are classified structurally only",
+      "parser must preserve discount_label_raw and discount_tag_raw when present",
+      "parser must not attach discount_detail to any item"
+    ],
+    "semantic_rules": [
+      "most Emart item discounts attach to the previous eligible item",
+      "use the last negative amount as the actual discount value",
+      "promotion text is auxiliary and should not override structural amount extraction"
+    ],
+    "examples": [
+      {
+        "input": "컵밥류 2+1 -1,660",
+        "semantic_expectation": "attach to previous item"
+      },
+      {
+        "input": "[앱]고소미50% -1,400",
+        "semantic_expectation": "attach to previous item, preserve [앱] as tag"
+      }
+    ]
+  },
+  "receipt_discount_policy": {
+    "description": "Receipt-level discount handling rules",
+    "enabled": true,
+    "parser_rules": [
+      "lines with ':' + reference code + negative amount are receipt_discount candidates",
+      "receipt_discount must remain separate from item discount"
+    ],
+    "semantic_rules": [
+      "receipt_discount must not be blindly attached to the previous item",
+      "receipt-level discounts should be resolved after all lines are available"
+    ],
+    "examples": [
+      {
+        "input": "삼성카드할인 : 2211101938 -5,000",
+        "role": "receipt_discount"
+      },
+      {
+        "input": "[앱]룰렛3천원 : 2201606243 -3,000",
+        "role": "receipt_discount"
+      }
+    ]
+  },
+  "fee_policy": {
+    "description": "Handling rules for non-item fee lines such as bottle deposit",
+    "enabled": true,
+    "known_fee_keywords": [
+      "공병",
+      "공 병"
+    ],
+    "parser_rules": [
+      "fee-like lines may be captured as store_role=fee if implemented",
+      "if common line types do not support fee, preserve as store_role and do not force-map to item_detail or noise without policy"
+    ],
+    "notes": [
+      "공병 보증금은 상품도 할인도 아닌 별도 금액 항목",
+      "현재 common line_type에는 fee가 없으므로 store_role 보조 필드 활용 가능"
+    ]
+  },
+  "normalization_policy": {
+    "description": "Normalization constraints for Emart",
+    "required": [
+      "preserve original line_text",
+      "generate normalized_line_text separately",
+      "strip leading star prefix when appropriate",
+      "strip item number prefix for name candidates",
+      "normalize OCR keyword variants such as 제대상금액 -> 결제대상금액",
+      "normalize spaced keywords such as 부 가 세 -> 부가세"
+    ],
+    "forbidden": [
+      "do not remove [앱] from raw text before semantic handoff",
+      "do not attach discount lines to items in parser stage",
+      "do not compute final_price in parser stage"
+    ]
+  },
+  "parser_output_policy": {
+    "description": "Required parser output behavior",
+    "required_base_fields": [
+      "line_idx",
+      "line_text",
+      "normalized_line_text",
+      "line_type"
+    ],
+    "optional_auxiliary_fields": [
+      "store_role",
+      "name_raw",
+      "code",
+      "qty",
+      "unit_price_raw",
+      "price_raw",
+      "discount_raw",
+      "discount_label_raw",
+      "discount_tag_raw",
+      "reference_code_raw",
+      "is_imputed_qty"
+    ],
+    "requirements": [
+      "all lines must be returned, including noise lines",
+      "line order must be preserved",
+      "single-line items may include both name_raw and numeric fields",
+      "final line_type must use common line type enum"
+    ]
+  },
+  "validation_hints": {
+    "description": "Optional downstream validation hints",
+    "item_level": [
+      "base_price - discount = final_price"
+    ],
+    "receipt_level": [
+      "sum(final_price) should be reconcilable with receipt total",
+      "결제대상금액 should be preferred over 합계 when both exist"
+    ],
+    "notes": [
+      "validation is not a parser responsibility",
+      "these are hints for semantic or downstream validation stages"
+    ]
+  },
+  "forbidden_parser_behaviors": [
+    {
+      "name": "discount_attachment",
+      "reason": "직전 상품 귀속은 semantic_interpreter 책임"
+    },
+    {
+      "name": "multi_line_item_object_creation",
+      "reason": "item_name + item_detail 결합은 semantic 단계에서 수행"
+    },
+    {
+      "name": "final_price_calculation",
+      "reason": "최종 가격 계산은 semantic 단계에서 수행"
+    },
+    {
+      "name": "dropping_discount_labels_or_tags",
+      "reason": "프로모션명과 [앱] 태그는 후속 해석과 디버깅에 필요"
+    },
+    {
+      "name": "misclassifying_discount_or_summary_as_item",
+      "reason": "discount, summary, item 간 충돌은 parser 단계에서 분리되어야 한다"
+    }
+  ],
+  "implementation_notes": [
+    "Emart 기본 상세라인 순서는 code + unit_price + qty + total_price",
+    "single-line item 구조는 일반 item_name보다 우선 검사해야 한다",
+    "discount_detail은 대부분 직전 item에 귀속되지만 parser는 구조 추출까지만 수행한다",
+    "receipt_discount와 item discount를 혼동하지 않도록 ':' + reference code 구조를 우선 처리한다"
+  ]
+}

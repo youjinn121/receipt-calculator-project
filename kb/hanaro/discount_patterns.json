@@ -1,0 +1,196 @@
+{
+  "version": "1.0.0",
+  "description": "Hanaro discount-related patterns and rules",
+  "line_roles_supported": [
+    "discount_detail",
+    "receipt_discount"
+  ],
+  "classification_priority": [
+    "receipt_discount",
+    "discount_detail"
+  ],
+  "discount_detail_patterns": {
+    "description": "상품 단위 할인 라인 패턴. 대부분 직전 상품에 귀속되는 할인",
+    "match_mode": "regex",
+    "patterns": [
+      {
+        "name": "named_discount_with_negative_amount",
+        "role": "discount_detail",
+        "pattern": "^(?P<label>.+?할인)\\s+(?P<discount_amount>-?[\\d,.]+)$",
+        "flags": [],
+        "extract_fields": [
+          "discount_label",
+          "discount_amount"
+        ],
+        "description": "상품 할인명 + 음수 금액"
+      },
+      {
+        "name": "alpha_prefixed_discount_code_line",
+        "role": "discount_detail",
+        "pattern": "^(?P<code>[A-Za-z]?\\d{6,20})\\s+(?P<unit_price>-?[\\d,.]+)\\s+(?P<qty>\\d+)\\s+(?P<discount_amount>-?[\\d,.]+)$",
+        "flags": [],
+        "extract_fields": [
+          "code",
+          "unit_price",
+          "qty",
+          "discount_amount"
+        ],
+        "description": "영문 prefix 허용 할인 상세 라인"
+      },
+      {
+        "name": "numbered_alpha_discount_code_line",
+        "role": "discount_detail",
+        "pattern": "^(?P<item_no>\\d{3})(?P<code>[A-Za-z]\\d{6,20})\\s+(?P<unit_price>-?[\\d,.]+)\\s+(?P<qty>\\d+)\\s+(?P<discount_amount>-?[\\d,.]+)$",
+        "flags": [],
+        "extract_fields": [
+          "item_no",
+          "code",
+          "unit_price",
+          "qty",
+          "discount_amount"
+        ],
+        "description": "3자리 번호 + 영문 prefix 할인 코드 라인"
+      }
+    ],
+    "examples": [
+      "삼겹 한돈자조금 할인 -1.369",
+      "005c99260200119192 -2.730 1 -2.730",
+      "c8806163190310 -660 1 -660",
+      "c9900015039990 -5,000 1 -5.000"
+    ],
+    "notes": [
+      "상품 할인은 대부분 직전 상품에 귀속되지만 parser는 연결하지 않는다",
+      "discount_amount는 정규화 후 양수 정수 후보(discount_raw)로 저장 가능",
+      "점(.) 구분자는 normalization 단계에서 천 단위 구분자로 보정한다"
+    ]
+  },
+  "receipt_discount_patterns": {
+    "description": "상품 단위가 아닌 영수증 전체 할인 또는 할인 집계 라인",
+    "match_mode": "regex_or_contains",
+    "patterns": [
+      {
+        "name": "rounding_discount",
+        "role": "receipt_discount",
+        "pattern": "^끝\\s*전\\s*할\\s*인\\s*[:：]?\\s*(?P<discount_amount>-?[\\d,.]+)$",
+        "flags": [],
+        "extract_fields": [
+          "discount_amount"
+        ],
+        "description": "끝전할인 및 OCR 띄어쓰기 변형"
+      },
+      {
+        "name": "coupon_discount",
+        "role": "receipt_discount",
+        "pattern": "^쿠폰할인\\s*[:：]?\\s*(?P<discount_amount>-?[\\d,.]+)$",
+        "flags": [],
+        "extract_fields": [
+          "discount_amount"
+        ],
+        "description": "쿠폰할인 라인"
+      },
+      {
+        "name": "total_discount_amount",
+        "role": "receipt_discount",
+        "pattern": "^총할인액\\s*[:：]?\\s*(?P<discount_amount>-?[\\d,.]+)$",
+        "flags": [],
+        "extract_fields": [
+          "discount_amount"
+        ],
+        "description": "전체 할인 합계 라인"
+      },
+      {
+        "name": "global_coupon_discount",
+        "role": "receipt_discount",
+        "pattern": "^(?P<label>.+할인쿠폰.*)\\s+(?P<discount_amount>-?[\\d,.]+)$",
+        "flags": [],
+        "extract_fields": [
+          "discount_label",
+          "discount_amount"
+        ],
+        "description": "품목처럼 보이지만 실제로는 전역 할인인 할인쿠폰 라인"
+      }
+    ],
+    "examples": [
+      "끝전할인: -4",
+      "끝 전할 인: -1",
+      "총할인액: -4",
+      "쿠폰할인: -660",
+      "농축산물 할인쿠폰 (4월2차) -1,400"
+    ],
+    "notes": [
+      "receipt_discount는 특정 상품에 직접 귀속하지 않는다",
+      "총할인액은 개별 할인 합계일 수 있으므로 semantic/validation 단계에서 참고한다"
+    ]
+  },
+  "classification_rules": [
+    {
+      "name": "receipt_discount_keywords_win",
+      "if": "line matches 끝전할인 / 쿠폰할인 / 총할인액 / 전역 할인쿠폰 patterns",
+      "assign_role": "receipt_discount",
+      "description": "전역 할인/집계 할인 우선"
+    },
+    {
+      "name": "discount_detail_named_or_coded",
+      "if": "line matches 상품 할인명 + 음수금액 or coded discount line",
+      "assign_role": "discount_detail",
+      "description": "상품 단위 할인"
+    }
+  ],
+  "field_mapping": {
+    "discount_detail": {
+      "discount_raw": "discount_amount",
+      "discount_label_raw": "discount_label",
+      "code": "code",
+      "qty": "qty",
+      "unit_price_raw": "unit_price"
+    },
+    "receipt_discount": {
+      "discount_raw": "discount_amount",
+      "discount_label_raw": "discount_label"
+    }
+  },
+  "normalization_hints": [
+    {
+      "name": "normalize_dot_separator_amount",
+      "description": "-1.369 -> -1,369 / -5.000 -> -5,000"
+    },
+    {
+      "name": "normalize_spaced_discount_keywords",
+      "description": "끝 전할 인 -> 끝전할인"
+    },
+    {
+      "name": "preserve_discount_label_raw",
+      "description": "할인 라벨은 semantic/validation 참고용으로 raw text 보존"
+    }
+  ],
+  "semantic_handoff_notes": [
+    "discount_detail은 대부분 직전 상품에 귀속되지만 parser는 연결하지 않는다",
+    "receipt_discount는 item_discount와 별도로 유지한다",
+    "총할인액은 개별 할인 중복 여부 검증에 사용될 수 있다",
+    "동일 금액 중복 할인 제거(dedupe)는 semantic 또는 validation 단계에서 처리한다"
+  ],
+  "fallback_rules": [
+    {
+      "condition": "line contains known receipt discount keyword and a negative amount",
+      "assign_role": "receipt_discount"
+    },
+    {
+      "condition": "line ends with a negative amount and matches named discount or coded discount structure",
+      "assign_role": "discount_detail"
+    }
+  ],
+  "forbidden_parser_behaviors": [
+    {
+      "name": "do_not_attach_discount_to_previous_item_in_parser",
+      "reason": "직전 상품 귀속은 semantic_interpreter 책임"
+    },
+    {
+      "name": "do_not_dedupe_discount_in_parser",
+      "reason": "중복 할인 제거는 semantic/validation 단계 책임"
+    },
+    {
+      "name": "do_not_use_total_discount_as_item_discount",
+      "reason": "총할인액은 집계 라인이며 특정 item 할인으로 사용하면 안 된다"
+    }
+  ]
+}

@@ -1,0 +1,351 @@
+{
+  "version": "1.1.0",
+  "description": "Emart item name and item detail parsing patterns (production-ready)",
+  "line_roles_supported": [
+    "item_name",
+    "item_detail"
+  ],
+  "classification_priority": [
+    "item_detail",
+    "item_name"
+  ],
+  "input_validity_policy": {
+    "description": "Guard rules to prevent accidental over-classification",
+    "rules": [
+      "A line matched by discount_patterns.json must not be classified as item_detail or item_name.",
+      "A line matched by summary_patterns.json must not be classified as item_detail or item_name.",
+      "A line matched by noise_patterns.json header patterns must not be classified as item_detail or item_name.",
+      "Single-line item patterns must be evaluated before generic item_name fallback.",
+      "Text-only lines may be item_name candidates, but only after item_detail, discount, summary, and noise checks fail."
+    ]
+  },
+  "item_name_patterns": {
+    "description": "상품명 라인 판별 규칙",
+    "match_mode": "regex_or_fallback_text",
+    "patterns": [
+      {
+        "name": "numbered_item_name_2digit",
+        "role": "item_name",
+        "pattern": "^(?P<item_no>\\d{2})\\s+(?P<name>.+)$",
+        "flags": [],
+        "extract_fields": [
+          "item_no",
+          "name"
+        ],
+        "description": "2자리 번호 prefix 상품명"
+      },
+      {
+        "name": "numbered_item_name_3digit",
+        "role": "item_name",
+        "pattern": "^(?P<item_no>\\d{3})\\s+(?P<name>.+)$",
+        "flags": [],
+        "extract_fields": [
+          "item_no",
+          "name"
+        ],
+        "description": "3자리 번호 prefix 상품명"
+      },
+      {
+        "name": "star_numbered_item_name",
+        "role": "item_name",
+        "pattern": "^\\*\\s*(?P<item_no>\\d{2,3})\\s+(?P<name>.+)$",
+        "flags": [],
+        "extract_fields": [
+          "item_no",
+          "name"
+        ],
+        "description": "* + 번호 prefix 상품명"
+      },
+      {
+        "name": "parenthesized_alpha_prefix_name",
+        "role": "item_name",
+        "pattern": "^\\((?P<prefix>[A-Za-z]{1,3})\\)(?P<name>.+)$",
+        "flags": [],
+        "extract_fields": [
+          "prefix",
+          "name"
+        ],
+        "description": "(J), (JN), (Ph) 같은 괄호 영문 prefix 포함 상품명"
+      }
+    ],
+    "examples": [
+      "01 떡붕어싸만코",
+      "02 오뚜기 컵밥 옛날 잡",
+      "001 큐원아이스크림만기믹스딸기맛190",
+      "(J)무항생제볶음탕용",
+      "(JN)친환경참타리버섯"
+    ],
+    "notes": [
+      "상품번호는 상품명 일부가 아니라 prefix로 보고 제거 가능",
+      "괄호 영문 prefix는 normalization 대상이며 raw text는 보존한다",
+      "item_name fallback은 detail/discount/summary/noise 패턴 검사 이후에만 적용한다"
+    ]
+  },
+  "item_detail_patterns": {
+    "description": "상품 상세 라인 패턴",
+    "match_mode": "regex",
+    "patterns": [
+      {
+        "name": "barcode_unit_qty_total_standard",
+        "role": "item_detail",
+        "pattern": "^(?P<code>\\d{13})\\s+(?P<unit_price>[\\d,]+)\\s+(?P<qty>\\d+)\\s+(?P<total_price>[\\d,]+)$",
+        "flags": [],
+        "extract_fields": [
+          "code",
+          "unit_price",
+          "qty",
+          "total_price"
+        ],
+        "description": "기본형: 13자리 코드 + 단가 + 수량 + 금액"
+      },
+      {
+        "name": "star_barcode_unit_qty_total",
+        "role": "item_detail",
+        "pattern": "^\\*\\s*(?P<code>\\d{13})\\s+(?P<unit_price>[\\d,]+)\\s+(?P<qty>\\d+)\\s+(?P<total_price>[\\d,]+)$",
+        "flags": [],
+        "extract_fields": [
+          "code",
+          "unit_price",
+          "qty",
+          "total_price"
+        ],
+        "description": "* prefix 포함 상세라인"
+      },
+      {
+        "name": "star_attached_barcode_unit_qty_total",
+        "role": "item_detail",
+        "pattern": "^\\*(?P<code>\\d{13})\\s+(?P<unit_price>[\\d,]+)\\s+(?P<qty>\\d+)\\s+(?P<total_price>[\\d,]+)$",
+        "flags": [],
+        "extract_fields": [
+          "code",
+          "unit_price",
+          "qty",
+          "total_price"
+        ],
+        "description": "*가 코드에 붙은 상세라인"
+      },
+      {
+        "name": "barcode_unit_total_missing_qty",
+        "role": "item_detail",
+        "pattern": "^(?P<code>\\d{13})\\s+(?P<unit_price>[\\d,]+)\\s+(?P<total_price>[\\d,]+)$",
+        "flags": [],
+        "extract_fields": [
+          "code",
+          "unit_price",
+          "total_price"
+        ],
+        "post_process": {
+          "qty": 1,
+          "is_imputed_qty": true
+        },
+        "description": "qty 누락 케이스 → qty=1 보정"
+      },
+      {
+        "name": "star_barcode_unit_total_missing_qty",
+        "role": "item_detail",
+        "pattern": "^\\*\\s*(?P<code>\\d{13})\\s+(?P<unit_price>[\\d,]+)\\s+(?P<total_price>[\\d,]+)$",
+        "flags": [],
+        "extract_fields": [
+          "code",
+          "unit_price",
+          "total_price"
+        ],
+        "post_process": {
+          "qty": 1,
+          "is_imputed_qty": true
+        },
+        "description": "* prefix + qty 누락 케이스"
+      }
+    ],
+    "examples": [
+      "8801121027097 1,450 1 1,450",
+      "*8801013770025 280 4 1,120",
+      "1500000018153 5,480 5,480",
+      "*8809205164010 4,820 4,820"
+    ],
+    "notes": [
+      "이마트 기본 상세라인은 code + unit_price + qty + total_price 순서",
+      "qty 누락 시 3-token 구조를 qty=1로 보정 가능",
+      "* prefix는 normalization 후 코드 필드에서 제거 가능",
+      "discount_detail, receipt_discount, total/subtotal 구조와 충돌하면 item_detail로 분류하면 안 된다"
+    ]
+  },
+  "single_line_item_patterns": {
+    "description": "상품명과 상품 상세가 한 줄에 결합된 패턴",
+    "match_mode": "regex",
+    "patterns": [
+      {
+        "name": "numbered_name_unit_qty_total_inline",
+        "role": "item_detail",
+        "pattern": "^(?P<item_no>\\d{2,3})\\s+(?P<name>.+?)\\s+(?P<unit_price>[\\d,]+)\\s+(?P<qty>\\d+)\\s+(?P<total_price>[\\d,]+)$",
+        "flags": [],
+        "extract_fields": [
+          "item_no",
+          "name",
+          "unit_price",
+          "qty",
+          "total_price"
+        ],
+        "description": "번호 + 상품명 + 단가 + 수량 + 금액"
+      },
+      {
+        "name": "star_numbered_name_unit_qty_total_inline",
+        "role": "item_detail",
+        "pattern": "^\\*\\s*(?P<item_no>\\d{2,3})\\s+(?P<name>.+?)\\s+(?P<unit_price>[\\d,]+)\\s+(?P<qty>\\d+)\\s+(?P<total_price>[\\d,]+)$",
+        "flags": [],
+        "extract_fields": [
+          "item_no",
+          "name",
+          "unit_price",
+          "qty",
+          "total_price"
+        ],
+        "description": "* + 번호 + 상품명 + 단가 + 수량 + 금액"
+      },
+      {
+        "name": "name_unit_qty_total_inline",
+        "role": "item_detail",
+        "pattern": "^(?P<name>.+?)\\s+(?P<unit_price>[\\d,]+)\\s+(?P<qty>\\d+)\\s+(?P<total_price>[\\d,]+)$",
+        "flags": [],
+        "extract_fields": [
+          "name",
+          "unit_price",
+          "qty",
+          "total_price"
+        ],
+        "description": "번호 없는 상품명 + 단가 + 수량 + 금액 결합형"
+      }
+    ],
+    "examples": [
+      "* 01 (Ph)돌바나나(송이) 2,280 1 2,280",
+      "퍼실 딥클린 파워젤 26,980 3 80,940"
+    ],
+    "notes": [
+      "이 패턴은 일반 item_name보다 우선적으로 검사해야 한다",
+      "상품명과 상세 필드가 한 줄에 결합되어 있어 parser 단계에서 함께 추출 가능",
+      "이 경우 code는 optional field다",
+      "할인 라인처럼 마지막 음수 금액이 있는 구조는 single-line item으로 분류하면 안 된다"
+    ]
+  },
+  "field_mapping": {
+    "item_name": {
+      "name_raw": "name"
+    },
+    "item_detail": {
+      "code": "code",
+      "qty": "qty",
+      "unit_price_raw": "unit_price",
+      "price_raw": "total_price",
+      "name_raw": "name"
+    }
+  },
+  "field_optional_policy": {
+    "description": "Optionality of extracted fields by pattern family",
+    "item_name": {
+      "required": [
+        "name_raw"
+      ],
+      "optional": [
+        "item_no"
+      ]
+    },
+    "item_detail": {
+      "required": [
+        "unit_price_raw",
+        "price_raw"
+      ],
+      "optional": [
+        "code",
+        "qty",
+        "name_raw",
+        "item_no",
+        "is_imputed_qty"
+      ]
+    },
+    "notes": [
+      "single-line item_detail may not have code",
+      "3-token detail structures may not have explicit qty"
+    ]
+  },
+  "normalization_hints": [
+    {
+      "name": "strip_leading_star_prefix",
+      "description": "*8801013770025 -> 8801013770025"
+    },
+    {
+      "name": "strip_item_number_prefix_for_name_candidates",
+      "description": "01 상품명 -> 상품명 / 001 상품명 -> 상품명"
+    },
+    {
+      "name": "remove_parenthesized_alpha_prefix_from_name",
+      "description": "(J), (JN), (Ph) 같은 괄호 영문 prefix 제거"
+    },
+    {
+      "name": "impute_qty_as_1_for_3_token_detail",
+      "description": "code + unit_price + total_price 구조면 qty=1 보정"
+    }
+  ],
+  "classification_rules": [
+    {
+      "name": "single_line_item_detail_before_item_name",
+      "if": "line matches any single_line_item_patterns and does not match discount or summary patterns",
+      "assign_role": "item_detail",
+      "description": "통합형은 item_name보다 먼저 item_detail로 분류"
+    },
+    {
+      "name": "barcode_detail_before_name",
+      "if": "line starts with barcode-like numeric token and matches detail pattern",
+      "assign_role": "item_detail",
+      "description": "숫자 시작 상세라인 우선"
+    },
+    {
+      "name": "fallback_text_to_item_name",
+      "if": "line does not match detail/discount/summary/noise patterns and looks like product text",
+      "assign_role": "item_name",
+      "description": "일반 텍스트 fallback"
+    }
+  ],
+  "fallback_rules": [
+    {
+      "condition": "line starts with barcode-like token and has 3 or 4 transactional tokens",
+      "assign_role": "item_detail"
+    },
+    {
+      "condition": "line contains product-like text and does not match discount/summary/noise pattern groups",
+      "assign_role": "item_name"
+    }
+  ],
+  "collision_avoidance_rules": [
+    {
+      "name": "not_discount_line",
+      "rule": "If the line ends with a negative amount or matches emart/discount_patterns.json, it must not be classified as item_detail or item_name."
+    },
+    {
+      "name": "not_summary_line",
+      "rule": "If the line matches emart/summary_patterns.json, it must not be classified as item_detail or item_name."
+    },
+    {
+      "name": "not_header_line",
+      "rule": "If the line matches emart/noise_patterns.json header patterns, it must not be classified as item_detail or item_name."
+    }
+  ],
+  "semantic_handoff_notes": [
+    "item_name과 item_detail은 parser에서 연결하지 않는다",
+    "single-line item structures may already include name_raw in parser output",
+    "discount 연결과 최종 item 생성은 semantic interpreter에서 수행한다"
+  ],
+  "forbidden_parser_behaviors": [
+    {
+      "name": "do_not_attach_discount",
+      "reason": "할인 귀속은 semantic interpreter 책임"
+    },
+    {
+      "name": "do_not_merge_multi_line_item_object",
+      "reason": "item_name + item_detail 결합은 semantic 단계에서 수행"
+    },
+    {
+      "name": "do_not_classify_discount_or_summary_lines_as_items",
+      "reason": "item, discount, summary 충돌은 parser 단계에서 분리되어야 한다"
+    }
+  ]
+}

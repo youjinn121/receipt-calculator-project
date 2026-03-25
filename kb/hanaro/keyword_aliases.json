@@ -1,0 +1,186 @@
+{
+  "version": "1.1.0",
+  "description": "Hanaro keyword aliases and OCR-variant mappings for normalization and keyword matching (production-ready)",
+  "policy": {
+    "purpose": [
+      "OCR 오인식, 띄어쓰기 변형, 대괄호 태그형 키워드를 정규 키워드로 매핑한다",
+      "이 파일은 keyword matching 보조용이며 최종 line classification은 pattern files에서 수행한다",
+      "원본 line_text는 반드시 보존하고 normalized_line_text 또는 keyword matching 단계에서만 alias를 적용한다",
+      "alias는 pattern matching의 안정성을 높이기 위한 것이며 line_type을 직접 결정하지 않는다"
+    ],
+    "do_not_use_for": [
+      "discount attachment",
+      "item grouping",
+      "semantic interpretation",
+      "numeric field extraction",
+      "final line_type forcing"
+    ]
+  },
+  "input_validity_policy": {
+    "description": "Guard rules for safe alias application",
+    "rules": [
+      "Alias matching must not overwrite original line_text.",
+      "Bracket tags must not be removed from raw text before semantic handoff.",
+      "Keyword alias application must not directly force item_name, discount_detail, receipt_discount, subtotal, total, or noise.",
+      "Alias matching may improve candidate detection but final classification must be decided by store pattern files."
+    ]
+  },
+  "aliases": [
+    {
+      "canonical": "상품코드헤더",
+      "type": "header_keyword",
+      "match_mode": "space_insensitive_contains",
+      "aliases": [
+        "상품(코드) 단가 수량 금액",
+        "상품 (코드) 단가 수량 금액",
+        "상품(코드)단가수량금액"
+      ],
+      "description": "하나로마트 컬럼 헤더"
+    },
+    {
+      "canonical": "총구매액",
+      "type": "subtotal_keyword",
+      "match_mode": "space_insensitive_exact_or_contains",
+      "aliases": [
+        "총구매액",
+        "총 구매액"
+      ],
+      "description": "중간 구매 금액 요약 키워드"
+    },
+    {
+      "canonical": "내실금액",
+      "type": "total_keyword",
+      "match_mode": "space_insensitive_exact_or_contains",
+      "aliases": [
+        "내실금액",
+        "내 실 금 액",
+        "내실 금액"
+      ],
+      "description": "최종 결제 금액 키워드"
+    },
+    {
+      "canonical": "총할인액",
+      "type": "receipt_discount_keyword",
+      "match_mode": "space_insensitive_exact_or_contains",
+      "aliases": [
+        "총할인액",
+        "총 할인액"
+      ],
+      "description": "전체 할인 합계 키워드"
+    },
+    {
+      "canonical": "끝전할인",
+      "type": "receipt_discount_keyword",
+      "match_mode": "space_insensitive_exact_or_contains",
+      "aliases": [
+        "끝전할인",
+        "끝 전할 인",
+        "끝 전 할인",
+        "끝전 할인"
+      ],
+      "description": "잔돈 할인 키워드 및 OCR 띄어쓰기 변형"
+    },
+    {
+      "canonical": "쿠폰할인",
+      "type": "receipt_discount_keyword",
+      "match_mode": "space_insensitive_exact_or_contains",
+      "aliases": [
+        "쿠폰할인",
+        "쿠폰 할인"
+      ],
+      "description": "쿠폰 할인 키워드"
+    },
+    {
+      "canonical": "이벤트할인",
+      "type": "receipt_discount_keyword",
+      "match_mode": "space_insensitive_exact_or_contains",
+      "aliases": [
+        "이벤트할인",
+        "이벤트 할인"
+      ],
+      "description": "이벤트 할인 키워드"
+    },
+    {
+      "canonical": "할인쿠폰",
+      "type": "receipt_discount_keyword",
+      "match_mode": "contains",
+      "aliases": [
+        "할인쿠폰",
+        "할인 쿠폰",
+        "농축산물 할인쿠폰"
+      ],
+      "description": "전역 할인쿠폰 계열 키워드"
+    },
+    {
+      "canonical": "카드쿠폰율",
+      "type": "discount_tag",
+      "match_mode": "bracket_tag",
+      "aliases": [
+        "[카드쿠폰(율)]"
+      ],
+      "description": "상품명 앞에 붙는 카드쿠폰 태그"
+    },
+    {
+      "canonical": "보조가격태그",
+      "type": "name_auxiliary_tag",
+      "match_mode": "bracket_amount",
+      "aliases": [
+        "[3,800]"
+      ],
+      "description": "상품명 뒤에 붙는 보조 가격 태그"
+    },
+    {
+      "canonical": "한돈자조금할인",
+      "type": "discount_keyword",
+      "match_mode": "space_insensitive_contains",
+      "aliases": [
+        "한돈자조금할인",
+        "한돈자조금 할인"
+      ],
+      "description": "상품 단위 할인명"
+    }
+  ],
+  "normalization_helpers": {
+    "space_insensitive_keywords": [
+      "총구매액",
+      "내실금액",
+      "총할인액",
+      "끝전할인",
+      "쿠폰할인",
+      "이벤트할인"
+    ],
+    "preserve_raw_tags": [
+      "[카드쿠폰(율)]",
+      "[3,800]"
+    ],
+    "name_cleanup_targets": [
+      "[카드쿠폰(율)]",
+      "[3,800]"
+    ],
+    "notes": [
+      "preserve_raw_tags는 raw line_text에서 유지해야 하는 태그이다",
+      "name_cleanup_targets는 name candidate normalization에서만 제거 가능한 태그이다"
+    ]
+  },
+  "recommended_matching_order": [
+    "preserve original line_text",
+    "normalize whitespace",
+    "apply alias matching",
+    "apply store-specific item/discount/summary/noise patterns",
+    "map store role to common line_type"
+  ],
+  "classification_notes": [
+    "총구매액은 subtotal 후보를 보조한다",
+    "내실금액은 total 후보를 보조한다",
+    "총할인액, 끝전할인, 쿠폰할인, 이벤트할인, 할인쿠폰은 receipt_discount 후보를 보조한다",
+    "한돈자조금할인 같은 키워드는 discount_detail 후보를 보조한다",
+    "대괄호 태그는 item_name candidate의 normalization에 영향을 줄 수 있지만 직접 line_type을 결정하지 않는다"
+  ],
+  "parser_notes": [
+    "Alias matching must not overwrite original line_text.",
+    "Bracket tags such as [카드쿠폰(율)] and [3,800] should remain visible in raw text for traceability.",
+    "This file is for keyword equivalence and OCR variant matching only.",
+    "Code parsing, amount extraction, and qty imputation must be handled in pattern files and policies.",
+    "Final classification must be determined by item_patterns.json, discount_patterns.json, summary_patterns.json, and noise_patterns.json."
+  ]
+}

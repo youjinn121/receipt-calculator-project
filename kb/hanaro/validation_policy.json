@@ -1,0 +1,200 @@
+{
+  "version": "1.0.0",
+  "description": "Hanaro receipt validation and consistency rules (production-ready)",
+  "policy_scope": [
+    "semantic_interpreter",
+    "validation"
+  ],
+  "purpose": [
+    "상품 단위 가격 계산의 일관성을 검증한다",
+    "영수증 전체 합계와 상품 합계를 비교한다",
+    "중복 할인 적용을 방지한다",
+    "할인 집계 라인과 실제 할인 합의 일치 여부를 확인한다"
+  ],
+  "core_principles": [
+    "validation must not change parser output",
+    "validation must not reclassify line types",
+    "validation operates only on semantic-level item objects",
+    "raw line data must remain unchanged"
+  ],
+
+  "item_level_validation": {
+    "description": "상품 단위 검증 규칙",
+    "rules": [
+      {
+        "name": "price_consistency",
+        "formula": "base_price - discount = final_price",
+        "tolerance": 0,
+        "severity": "error",
+        "description": "상품 단위 가격 일관성 검증"
+      },
+      {
+        "name": "non_negative_final_price",
+        "condition": "final_price >= 0",
+        "severity": "error",
+        "description": "최종 가격은 음수가 될 수 없음"
+      },
+      {
+        "name": "discount_not_exceed_base",
+        "condition": "discount <= base_price",
+        "severity": "error",
+        "description": "할인 금액은 상품 가격을 초과할 수 없음"
+      }
+    ]
+  },
+
+  "receipt_level_validation": {
+    "description": "영수증 전체 검증 규칙",
+    "rules": [
+      {
+        "name": "total_price_match",
+        "formula": "sum(final_price) == receipt_total",
+        "tolerance": 1,
+        "severity": "warning",
+        "description": "상품 총합과 최종 결제 금액 일치 여부"
+      },
+      {
+        "name": "subtotal_vs_total_relation",
+        "formula": "subtotal >= receipt_total",
+        "severity": "warning",
+        "description": "총구매액은 내실금액보다 크거나 같아야 함"
+      }
+    ],
+    "priority_total_field": [
+      "내실금액"
+    ],
+    "fallback_total_fields": [
+      "총구매액"
+    ]
+  },
+
+  "discount_validation": {
+    "description": "할인 관련 검증 규칙",
+    "rules": [
+      {
+        "name": "discount_sum_match",
+        "formula": "sum(item_discounts) == total_discount",
+        "tolerance": 1,
+        "severity": "warning",
+        "description": "개별 할인 합과 총할인액 일치 여부"
+      },
+      {
+        "name": "receipt_discount_consistency",
+        "formula": "쿠폰할인 + 이벤트할인 + 끝전할인 ≈ 총할인액",
+        "tolerance": 1,
+        "severity": "warning",
+        "description": "하단 할인 합과 총할인액 비교"
+      }
+    ],
+    "notes": [
+      "총할인액은 집계값이며 item-level discount로 직접 사용하면 안 된다",
+      "하단 할인 라인은 validation용 reference로 사용"
+    ]
+  },
+
+  "dedupe_policy": {
+    "description": "중복 할인 제거 정책",
+    "rules": [
+      {
+        "name": "prevent_duplicate_discount",
+        "condition": "same_amount AND same_context",
+        "action": "count_once",
+        "description": "동일 할인 금액이 item 영역과 summary 영역에 동시에 존재할 경우 1회만 반영"
+      },
+      {
+        "name": "summary_discount_not_reapplied",
+        "condition": "discount_already_applied_in_items",
+        "action": "ignore_summary_discount",
+        "description": "총할인액을 다시 item discount로 적용하지 않음"
+      }
+    ],
+    "apply_stage": "semantic_or_validation_only",
+    "notes": [
+      "parser 단계에서는 dedupe 수행 금지",
+      "semantic 단계에서 discount attribution 이후 적용"
+    ]
+  },
+
+  "anomaly_detection": {
+    "description": "이상 데이터 탐지 규칙",
+    "rules": [
+      {
+        "name": "extreme_discount_ratio",
+        "condition": "discount / base_price > 0.9",
+        "severity": "warning",
+        "description": "비정상적으로 높은 할인율 감지"
+      },
+      {
+        "name": "zero_price_item",
+        "condition": "final_price == 0",
+        "severity": "info",
+        "description": "무료 또는 100% 할인 상품"
+      },
+      {
+        "name": "missing_total",
+        "condition": "receipt_total is null",
+        "severity": "error",
+        "description": "총 결제 금액 없음"
+      }
+    ]
+  },
+
+  "field_mapping": {
+    "receipt_total_candidates": [
+      "내실금액"
+    ],
+    "subtotal_candidates": [
+      "총구매액"
+    ],
+    "discount_summary_candidates": [
+      "총할인액",
+      "쿠폰할인",
+      "이벤트할인",
+      "끝전할인"
+    ]
+  },
+
+  "tolerance_policy": {
+    "default_tolerance": 1,
+    "currency": "KRW",
+    "description": "원 단위 rounding 오차 허용"
+  },
+
+  "forbidden_behaviors": [
+    {
+      "name": "no_data_mutation",
+      "reason": "validation은 데이터를 수정하면 안 된다"
+    },
+    {
+      "name": "no_line_reclassification",
+      "reason": "line_type 변경은 parser 책임"
+    },
+    {
+      "name": "no_discount_reassignment",
+      "reason": "discount 연결은 semantic 단계에서만 수행"
+    }
+  ],
+
+  "validation_output_format": {
+    "description": "검증 결과 출력 형식",
+    "fields": [
+      "rule_name",
+      "status",
+      "severity",
+      "message",
+      "related_items"
+    ],
+    "status_types": [
+      "pass",
+      "fail",
+      "warning"
+    ]
+  },
+
+  "implementation_notes": [
+    "Hanaro는 receipt_discount와 item discount가 동시에 존재하므로 반드시 분리 검증 필요",
+    "총할인액은 reference 값이며 직접 discount로 사용하면 안 된다",
+    "validation은 semantic 단계 이후 실행해야 정확하다",
+    "dedupe는 validation 또는 semantic 단계에서만 수행해야 한다"
+  ]
+}

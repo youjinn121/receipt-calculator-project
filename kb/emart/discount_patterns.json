@@ -1,0 +1,181 @@
+{
+  "version": "1.0.0",
+  "description": "Emart discount-related patterns and rules",
+  "line_roles_supported": [
+    "discount_detail",
+    "receipt_discount"
+  ],
+  "classification_priority": [
+    "receipt_discount",
+    "discount_detail"
+  ],
+  "discount_detail_patterns": {
+    "description": "상품 단위 할인 라인 패턴. 대부분 직전 상품에 귀속되는 위치 기반 할인",
+    "match_mode": "regex",
+    "patterns": [
+      {
+        "name": "promotion_text_with_negative_amount",
+        "role": "discount_detail",
+        "pattern": "^(?P<label>.+?)\\s+(?P<discount_amount>-\\d[\\d,]*)$",
+        "flags": [],
+        "extract_fields": [
+          "discount_label",
+          "discount_amount"
+        ],
+        "description": "프로모션명 + 음수 금액"
+      },
+      {
+        "name": "promotion_n_plus_m_with_negative_amount",
+        "role": "discount_detail",
+        "pattern": "^(?P<label>.+?)\\s+\\d+\\+\\d+\\s+(?P<discount_amount>-\\d[\\d,]*)$",
+        "flags": [],
+        "extract_fields": [
+          "discount_label",
+          "discount_amount"
+        ],
+        "description": "1+1, 2+1 등의 행사 표현 + 음수 금액"
+      },
+      {
+        "name": "app_tag_discount_line",
+        "role": "discount_detail",
+        "pattern": "^\\[(?P<tag>[^\\]]+)\\](?P<label>.+?)\\s+(?P<discount_amount>-\\d[\\d,]*)$",
+        "flags": [],
+        "extract_fields": [
+          "discount_tag",
+          "discount_label",
+          "discount_amount"
+        ],
+        "description": "앱/태그성 할인 라인"
+      },
+      {
+        "name": "category_or_bracket_discount_line",
+        "role": "discount_detail",
+        "pattern": "^(?P<label>(\\[[^\\]]+\\]\\s*)?.+?)\\s+(?P<discount_amount>-\\d[\\d,]*)$",
+        "flags": [],
+        "extract_fields": [
+          "discount_label",
+          "discount_amount"
+        ],
+        "description": "카테고리/대괄호 포함 할인 라인"
+      }
+    ],
+    "examples": [
+      "컵밥류 2+1 -1,660",
+      "샌드류5개5천 -5,000",
+      "[앱]고소미50% -1,400",
+      "[잡화/반려] 24년 1주 -1,500",
+      "포인트카드 -15,000"
+    ],
+    "notes": [
+      "프로모션명은 보조 정보이며 핵심은 마지막 음수 금액이다",
+      "이마트 discount_detail은 대부분 직전 item에 귀속되지만 parser는 연결하지 않는다"
+    ]
+  },
+  "receipt_discount_patterns": {
+    "description": "상품 단위가 아닌 영수증 전체 할인 라인 패턴",
+    "match_mode": "regex",
+    "patterns": [
+      {
+        "name": "payment_discount_with_code",
+        "role": "receipt_discount",
+        "pattern": "^(?P<label>.+?할인)\\s*:\\s*(?P<ref_code>\\d+)\\s*-\\s*(?P<discount_amount>[\\d,]+)$",
+        "flags": [],
+        "extract_fields": [
+          "discount_label",
+          "ref_code",
+          "discount_amount"
+        ],
+        "description": "결제수단/할인명 + : + 코드 + 음수 금액"
+      },
+      {
+        "name": "app_receipt_discount_with_code",
+        "role": "receipt_discount",
+        "pattern": "^\\[(?P<tag>[^\\]]+)\\](?P<label>.+?)\\s*:\\s*(?P<ref_code>\\d+)\\s*-\\s*(?P<discount_amount>[\\d,]+)$",
+        "flags": [],
+        "extract_fields": [
+          "discount_tag",
+          "discount_label",
+          "ref_code",
+          "discount_amount"
+        ],
+        "description": "앱 태그 포함 영수증 전체 할인"
+      }
+    ],
+    "examples": [
+      "결제할인 : 2201606006 -4,410",
+      "삼성카드할인 : 2211101938 -5,000",
+      "[앱]룰렛3천원 : 2201606243 -3,000",
+      "15%할인 : 2201606094 - 3,000"
+    ],
+    "notes": [
+      "이 패턴은 특정 상품이 아니라 영수증 전체 할인이다",
+      "parser는 item에 귀속하지 않고 별도로 유지한다"
+    ]
+  },
+  "classification_rules": [
+    {
+      "name": "receipt_discount_has_colon_and_reference_code",
+      "if": "line contains ':' and reference code and trailing negative amount",
+      "assign_role": "receipt_discount",
+      "description": "코드 참조가 있는 할인은 receipt_discount 우선"
+    },
+    {
+      "name": "discount_detail_has_trailing_negative_amount",
+      "if": "line ends with negative amount and does not match receipt_discount pattern",
+      "assign_role": "discount_detail",
+      "description": "마지막 음수 금액 기반 상품 할인"
+    }
+  ],
+  "field_mapping": {
+    "discount_detail": {
+      "discount_raw": "discount_amount",
+      "discount_label_raw": "discount_label",
+      "discount_tag_raw": "discount_tag"
+    },
+    "receipt_discount": {
+      "discount_raw": "discount_amount",
+      "discount_label_raw": "discount_label",
+      "discount_tag_raw": "discount_tag",
+      "reference_code_raw": "ref_code"
+    }
+  },
+  "normalization_hints": [
+    {
+      "name": "preserve_bracket_tags_in_raw_text",
+      "description": "[앱] 같은 태그는 raw text에 보존"
+    },
+    {
+      "name": "extract_last_negative_amount",
+      "description": "프로모션 문구보다 마지막 음수 금액을 우선 추출"
+    },
+    {
+      "name": "normalize_spaced_negative_amount",
+      "description": "- 3,000 -> -3,000"
+    }
+  ],
+  "semantic_handoff_notes": [
+    "discount_detail은 대부분 직전 item에 귀속되지만 parser는 연결하지 않는다",
+    "receipt_discount는 특정 상품에 붙이지 않고 별도로 유지한다",
+    "프로모션명은 semantic이나 UI에서 보조 정보로 사용할 수 있으므로 raw text를 보존한다"
+  ],
+  "fallback_rules": [
+    {
+      "condition": "line contains trailing negative amount and does not contain reference code after ':'",
+      "assign_role": "discount_detail"
+    },
+    {
+      "condition": "line contains ':' and trailing negative amount and looks like payment/app discount",
+      "assign_role": "receipt_discount"
+    }
+  ],
+  "forbidden_parser_behaviors": [
+    {
+      "name": "do_not_attach_to_previous_item_in_parser",
+      "reason": "직전 상품 귀속은 semantic interpreter 책임"
+    },
+    {
+      "name": "do_not_drop_discount_label",
+      "reason": "프로모션명/태그는 후속 해석과 디버깅에 필요"
+    }
+  ]
+}

@@ -1,0 +1,196 @@
+{
+  "version": "1.0.0",
+  "description": "Emart keyword aliases and OCR-variant mappings for normalization and keyword matching",
+  "policy": {
+    "purpose": [
+      "OCR 오인식, 띄어쓰기 변형, 태그 포함 변형을 정규 키워드로 매핑한다",
+      "이 파일은 keyword matching 보조용이며 최종 line classification은 pattern files에서 수행한다",
+      "원본 line_text는 반드시 보존하고 normalized_line_text 또는 keyword matching 단계에서만 alias를 적용한다"
+    ],
+    "do_not_use_for": [
+      "discount attachment",
+      "item grouping",
+      "semantic interpretation",
+      "numeric field extraction"
+    ]
+  },
+  "aliases": [
+    {
+      "canonical": "상품명",
+      "type": "header_keyword",
+      "match_mode": "exact_or_contains",
+      "aliases": [
+        "상품명"
+      ],
+      "description": "이마트 헤더 키워드"
+    },
+    {
+      "canonical": "상품코드",
+      "type": "header_keyword",
+      "match_mode": "exact_or_contains",
+      "aliases": [
+        "상품코드"
+      ],
+      "description": "이마트 헤더 키워드"
+    },
+    {
+      "canonical": "단가",
+      "type": "header_keyword",
+      "match_mode": "exact_or_contains",
+      "aliases": [
+        "단가"
+      ],
+      "description": "이마트 헤더 키워드"
+    },
+    {
+      "canonical": "수량",
+      "type": "header_keyword",
+      "match_mode": "exact_or_contains",
+      "aliases": [
+        "수량"
+      ],
+      "description": "이마트 헤더 키워드"
+    },
+    {
+      "canonical": "금액",
+      "type": "header_keyword",
+      "match_mode": "exact_or_contains",
+      "aliases": [
+        "금액"
+      ],
+      "description": "이마트 헤더 키워드"
+    },
+    {
+      "canonical": "결제대상금액",
+      "type": "total_keyword",
+      "match_mode": "space_insensitive_exact_or_contains",
+      "aliases": [
+        "결제대상금액",
+        "제대상금액"
+      ],
+      "description": "최종 결제 금액 키워드 및 OCR 오인식 보정"
+    },
+    {
+      "canonical": "합계",
+      "type": "total_keyword",
+      "match_mode": "space_insensitive_contains",
+      "aliases": [
+        "합계",
+        "합 계"
+      ],
+      "description": "합계 키워드 및 띄어쓰기 변형"
+    },
+    {
+      "canonical": "부가세",
+      "type": "tail_summary_keyword",
+      "match_mode": "space_insensitive_contains",
+      "aliases": [
+        "부가세",
+        "부 가 세"
+      ],
+      "description": "부가세 키워드 및 띄어쓰기 변형"
+    },
+    {
+      "canonical": "면세물품",
+      "type": "tail_summary_keyword",
+      "match_mode": "space_insensitive_contains",
+      "aliases": [
+        "면세물품",
+        "면세 물품",
+        "(*)면세물품",
+        "(*) 면세 물품"
+      ],
+      "description": "면세 물품 키워드 및 OCR/띄어쓰기 변형"
+    },
+    {
+      "canonical": "과세물품",
+      "type": "tail_summary_keyword",
+      "match_mode": "space_insensitive_contains",
+      "aliases": [
+        "과세물품",
+        "과세 물품"
+      ],
+      "description": "과세 물품 키워드 및 띄어쓰기 변형"
+    },
+    {
+      "canonical": "총품목수량",
+      "type": "tail_summary_keyword",
+      "match_mode": "space_insensitive_contains",
+      "aliases": [
+        "총품목수량",
+        "총 품목 수량"
+      ],
+      "description": "총 품목 수량 키워드 및 띄어쓰기 변형"
+    },
+    {
+      "canonical": "앱",
+      "type": "discount_tag",
+      "match_mode": "bracket_tag",
+      "aliases": [
+        "[앱]"
+      ],
+      "description": "앱 할인 태그. 삭제하지 말고 raw text에 보존"
+    },
+    {
+      "canonical": "할인",
+      "type": "discount_keyword",
+      "match_mode": "contains",
+      "aliases": [
+        "할인",
+        "결제할인",
+        "삼성카드할인"
+      ],
+      "description": "할인 일반 키워드"
+    },
+    {
+      "canonical": "공병",
+      "type": "fee_keyword",
+      "match_mode": "space_insensitive_exact_or_contains",
+      "aliases": [
+        "공병",
+        "공 병"
+      ],
+      "description": "공병 보증금 관련 키워드"
+    }
+  ],
+  "normalization_helpers": {
+    "space_insensitive_keywords": [
+      "결제대상금액",
+      "합계",
+      "부가세",
+      "면세물품",
+      "과세물품",
+      "총품목수량",
+      "공병"
+    ],
+    "preserve_raw_tags": [
+      "[앱]"
+    ],
+    "header_groups": [
+      [
+        "상품명",
+        "단가",
+        "수량",
+        "금액"
+      ],
+      [
+        "상품코드",
+        "단가",
+        "수량",
+        "금액"
+      ]
+    ]
+  },
+  "recommended_matching_order": [
+    "normalize whitespace",
+    "apply alias matching",
+    "apply store-specific item/discount/summary/noise patterns",
+    "map store role to common line_type"
+  ],
+  "parser_notes": [
+    "Alias matching must not overwrite original line_text.",
+    "[앱] tag must remain visible in raw text for semantic and UI traceability.",
+    "This file is for keyword equivalence and OCR variant matching only.",
+    "Barcode parsing, amount extraction, and qty imputation must be handled in pattern files and policies."
+  ]
+}

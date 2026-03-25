@@ -1,0 +1,241 @@
+{
+  "version": "1.0.0",
+  "description": "Costco parser and semantic handling policies",
+  "policy_scope": [
+    "parser",
+    "semantic_interpreter"
+  ],
+  "canonical_item_detail_fields": [
+    "code",
+    "qty",
+    "unit_price_raw",
+    "price_raw"
+  ],
+  "code_policy": {
+    "description": "Costco item and discount code handling rules",
+    "allowed_code_length_for_item_detail": {
+      "min": 4,
+      "max": 7
+    },
+    "allowed_code_length_for_discount_detail": {
+      "min": 4,
+      "max": 7
+    },
+    "notes": [
+      "일반 상품 코드는 주로 6~7자리",
+      "할인 상세 라인에서는 4~5자리 코드도 허용",
+      "코드처럼 보이는 숫자라도 store pattern과 함께 검증해야 한다"
+    ]
+  },
+  "qty_policy": {
+    "description": "Quantity parsing and imputation rules",
+    "accepted_qty_formats": [
+      "1x",
+      "1X",
+      "1"
+    ],
+    "normalize_uppercase_x_to_lowercase": true,
+    "allow_plain_integer_qty": true,
+    "imputation": {
+      "enabled": true,
+      "default_qty": 1,
+      "apply_only_when": [
+        "line is already classified as item_detail or discount_detail",
+        "code and price-like fields are confidently extracted",
+        "store pattern indicates missing qty case"
+      ],
+      "examples": [
+        {
+          "input": "630218 7990 7,990 T",
+          "output": {
+            "qty": 1,
+            "is_imputed_qty": true
+          }
+        }
+      ]
+    }
+  },
+  "amount_policy": {
+    "description": "Amount normalization and casting rules for Costco",
+    "normalize_number_spacing": true,
+    "normalize_dot_separator": true,
+    "strip_trailing_T_before_cast": true,
+    "strip_trailing_minus_before_discount_cast": true,
+    "strip_trailing_minus_T_before_discount_cast": true,
+    "examples": [
+      {
+        "input": "10, 790",
+        "normalized": "10,790"
+      },
+      {
+        "input": "2.500-T",
+        "normalized": "2,500-T"
+      },
+      {
+        "input": "1,800-",
+        "discount_raw": 1800
+      }
+    ]
+  },
+  "line_classification_policy": {
+    "description": "Recommended order for Costco line classification",
+    "priority_order": [
+      "total",
+      "subtotal",
+      "receipt_discount",
+      "discount_detail",
+      "discount_target",
+      "discount_keyword",
+      "item_detail",
+      "item_name",
+      "noise"
+    ],
+    "rules": [
+      "summary lines must be checked before generic item or noise rules",
+      "discount_detail must win over item_detail when trailing minus or -T exists",
+      "discount_target lines containing IRC, EXM, or PP must not be downgraded to item_name",
+      "noise must be applied only as the final fallback"
+    ]
+  },
+  "merge_policy": {
+    "description": "Repeated identical items may be grouped after parsing",
+    "enabled": true,
+    "apply_stage": "semantic_interpreter",
+    "group_when_all_match": [
+      "code",
+      "unit_price_raw",
+      "discount_state"
+    ],
+    "do_not_group_when": [
+      "discount attachment differs",
+      "unit_price_raw differs",
+      "same code appears with different semantic meaning"
+    ],
+    "output_behavior": {
+      "internal_data": "preserve original per-line items",
+      "ui_aggregation": "allowed"
+    },
+    "examples": [
+      {
+        "case": "same item repeated multiple times",
+        "condition": "same code + same unit_price_raw + same discount state",
+        "result": "groupable in semantic or UI layer"
+      }
+    ]
+  },
+  "discount_policy": {
+    "description": "Costco discount block handling policy",
+    "discount_block_markers": [
+      "CPN",
+      "쿠폰",
+      "자사 쿠폰",
+      "마스터쿠폰"
+    ],
+    "discount_target_tags": [
+      "IRC",
+      "EXM",
+      "PP",
+      "(PP)"
+    ],
+    "parser_rules": [
+      "parser must classify discount_keyword, discount_target, and discount_detail separately when possible",
+      "parser must preserve raw line_text for discount_target lines",
+      "parser must not attach discount_detail to any item"
+    ],
+    "semantic_rules": [
+      "if discount_target exists, try to attach discount to the matching product",
+      "if discount_target does not exist, attach discount to the previous eligible item",
+      "discount_target normalization may remove IRC, EXM, PP only after raw text is preserved"
+    ]
+  },
+  "receipt_discount_policy": {
+    "description": "Coupon-like or global discount handling",
+    "enabled": true,
+    "parser_rules": [
+      "coupon-only lines may be classified as receipt_discount candidates when they do not contain discount detail values",
+      "receipt_discount must be preserved separately from item discount"
+    ],
+    "semantic_rules": [
+      "receipt_discount must not be blindly attached to a product",
+      "global coupon semantics should be resolved after full line context is available"
+    ]
+  },
+  "normalization_policy": {
+    "description": "Normalization constraints for Costco",
+    "required": [
+      "preserve original line_text",
+      "generate normalized_line_text separately",
+      "normalize qty token x/X",
+      "normalize broken amount spacing",
+      "normalize dot separator amounts"
+    ],
+    "forbidden": [
+      "do not remove IRC, EXM, PP from raw text before semantic handoff",
+      "do not collapse multiple lines into one item in parser stage",
+      "do not compute final_price in parser stage"
+    ]
+  },
+  "parser_output_policy": {
+    "description": "Required parser output behavior",
+    "required_base_fields": [
+      "line_idx",
+      "line_text",
+      "normalized_line_text",
+      "line_type"
+    ],
+    "optional_auxiliary_fields": [
+      "store_role",
+      "code",
+      "qty",
+      "unit_price_raw",
+      "price_raw",
+      "discount_raw",
+      "discount_target_raw",
+      "discount_label_raw",
+      "is_imputed_qty"
+    ],
+    "requirements": [
+      "all lines must be returned, including noise",
+      "line order must be preserved",
+      "line_type must be mapped to common line type enum",
+      "store_role may be preserved as an auxiliary field"
+    ]
+  },
+  "validation_hints": {
+    "description": "Optional downstream validation hints",
+    "item_level": [
+      "base_price - discount = final_price"
+    ],
+    "receipt_level": [
+      "sum(final_price) should be reconcilable with receipt total"
+    ],
+    "notes": [
+      "validation is not a parser responsibility",
+      "these are hints for semantic or downstream validation stages"
+    ]
+  },
+  "forbidden_parser_behaviors": [
+    {
+      "name": "discount_attachment",
+      "reason": "할인 귀속은 semantic_interpreter 책임"
+    },
+    {
+      "name": "item_object_creation",
+      "reason": "여러 줄을 하나의 상품 객체로 병합하는 것은 semantic 단계에서 수행"
+    },
+    {
+      "name": "final_price_calculation",
+      "reason": "최종 가격 계산은 semantic 단계에서 수행"
+    },
+    {
+      "name": "aggressive_noise_classification",
+      "reason": "정상 거래 라인을 noise로 잘못 보내면 복구가 어렵다"
+    }
+  ],
+  "implementation_notes": [
+    "Costco는 item_detail raw order가 code + qty + unit_price + total_price인 경우가 많다",
+    "discount_detail도 유사한 구조를 가지지만 trailing minus 또는 -T가 존재한다",
+    "discount_target은 parser에서 연결하지 않고 semantic에 넘겨야 한다",
+    "동일 상품 그룹화는 semantic 또는 UI 단계에서만 수행한다"
+  ]
+}

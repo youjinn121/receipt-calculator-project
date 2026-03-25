@@ -1,0 +1,345 @@
+{
+  "version": "1.1.0",
+  "description": "Execution pipeline and data flow guide for the receipt parser using common line types, normalization rules, and store-specific KB (production-ready)",
+  "reference_files": [
+    "common/line_types.json",
+    "common/normalization_rules.json",
+    "{store}/roles_map.json",
+    "{store}/item_patterns.json",
+    "{store}/discount_patterns.json",
+    "{store}/summary_patterns.json",
+    "{store}/noise_patterns.json",
+    "{store}/policies.json",
+    "{store}/keyword_aliases.json"
+  ],
+  "goals": [
+    "원본 OCR line을 보존하면서 normalized_line_text를 별도로 생성한다",
+    "스토어별 패턴 차이를 공통 line_type 체계로 정규화한다",
+    "Parser는 구조 추출까지만 수행하고 의미 해석은 수행하지 않는다",
+    "Semantic Interpreter가 사용할 수 있는 안정적인 parser output을 생성한다",
+    "item, discount, summary, noise 간 role collision을 parser 단계에서 안정적으로 분리한다"
+  ],
+  "pipeline_flow": [
+    {
+      "step": 1,
+      "name": "Input Loading",
+      "input": "Raw OCR Result (List of lines with Bounding Boxes)",
+      "action": [
+        "Load OCR lines in original order",
+        "Preserve original line_text",
+        "Preserve line_idx",
+        "Preserve line-level coordinates or source word coordinates"
+      ],
+      "output": "Raw line objects"
+    },
+    {
+      "step": 2,
+      "name": "Common Normalization",
+      "input": "Raw line objects",
+      "action": [
+        "Apply common normalization rules from common/normalization_rules.json -> rules",
+        "Generate normalized_line_text separately from line_text",
+        "Do not overwrite original line_text",
+        "Apply whitespace cleanup, number separator normalization, split number join, prefix cleanup, keyword spacing normalization"
+      ],
+      "output": "Base normalized line objects"
+    },
+    {
+      "step": 3,
+      "name": "Store-Specific Normalization",
+      "input": "Base normalized line objects",
+      "action": [
+        "Identify store_id before pattern classification",
+        "Apply store-specific normalization overrides from common/normalization_rules.json -> store_overrides[store_id]",
+        "Apply keyword aliases from {store}/keyword_aliases.json",
+        "Keep both line_text and normalized_line_text"
+      ],
+      "output": "Store-optimized normalized line objects"
+    },
+    {
+      "step": 4,
+      "name": "Input Validity Guards",
+      "input": "Store-optimized normalized line objects",
+      "action": [
+        "Apply guard rules from {store}/policies.json -> input_validity_policy before final role classification",
+        "Prevent lines matched by discount patterns from being downgraded to item roles",
+        "Prevent lines matched by summary patterns from being downgraded to item roles",
+        "Prevent noise heuristics from swallowing valid item_name or item_detail lines",
+        "Ensure single-line item patterns are checked before generic item_name fallback"
+      ],
+      "output": "Validated candidate lines ready for role classification"
+    },
+    {
+      "step": 5,
+      "name": "Store Role Classification",
+      "input": "Validated candidate lines ready for role classification",
+      "action": [
+        "Classify each line using store-specific patterns and keywords",
+        "Use {store}/item_patterns.json for item_name and item_detail candidates",
+        "Use {store}/discount_patterns.json for discount_detail and receipt_discount candidates",
+        "Use {store}/summary_patterns.json for subtotal and total candidates",
+        "Use {store}/noise_patterns.json for noise candidates",
+        "If multiple store-role matches occur, follow store KB priority and choose the most specific role"
+      ],
+      "output": "Lines tagged with store_role"
+    },
+    {
+      "step": 6,
+      "name": "Common Line Type Mapping",
+      "input": "Lines tagged with store_role",
+      "action": [
+        "Map store_role to common line_type using {store}/roles_map.json",
+        "Final parser output line_type must use only the enum defined in common/line_types.json",
+        "If needed, preserve store_role as an auxiliary field",
+        "Unknown or unmatched lines must default to line_type=noise",
+        "Store roles declared as non_line_roles in {store}/roles_map.json must not be emitted as final common line_type values"
+      ],
+      "output": "Tagged lines with common line_type"
+    },
+    {
+      "step": 7,
+      "name": "Field Extraction",
+      "input": "Tagged lines with common line_type",
+      "action": [
+        "Extract code, qty, unit_price_raw, price_raw, discount_raw, name_raw as applicable",
+        "Use only store-specific extraction patterns from {store}/item_patterns.json and {store}/discount_patterns.json",
+        "Do not infer semantic relationships between lines",
+        "Subtotal and total lines may extract price_raw",
+        "Receipt discount lines may extract discount_raw",
+        "If field extraction is uncertain, preserve line_type and raw texts while omitting the uncertain field"
+      ],
+      "output": "Tagged lines with extracted raw fields"
+    },
+    {
+      "step": 8,
+      "name": "Numeric Casting and Qty Imputation",
+      "input": "Tagged lines with extracted raw fields",
+      "action": [
+        "Apply numeric field casting based on common/normalization_rules.json",
+        "Remove commas before integer casting",
+        "Handle trailing minus and trailing T markers",
+        "Apply qty=1 imputation only when allowed by {store}/policies.json and only after item_detail or discount_detail pattern match is confirmed",
+        "Set is_imputed_qty=true when qty is inferred",
+        "Do not apply qty imputation to plain text lines, discount_keyword lines, or summary lines"
+      ],
+      "output": "Parser-ready structured line objects"
+    },
+    {
+      "step": 9,
+      "name": "Final Output Packaging",
+      "input": "Parser-ready structured line objects",
+      "action": [
+        "Package metadata including store_id, parser version, and parsed_at",
+        "Return all lines including noise lines",
+        "Preserve ordering by line_idx",
+        "Preserve original line_text and normalized_line_text together",
+        "Ensure final line_type values are only from common/line_types.json"
+      ],
+      "output": "Final Parser Output Object (JSON)"
+    }
+  ],
+  "classification_priority_policy": {
+    "description": "Recommended priority when a line matches multiple candidate roles",
+    "priority_order": [
+      "total",
+      "subtotal",
+      "receipt_discount",
+      "discount_detail",
+      "item_detail",
+      "item_name",
+      "noise"
+    ],
+    "notes": [
+      "Store-specific priority may override this default when explicitly defined in store policies",
+      "A more specific numeric pattern should win over a generic text pattern",
+      "Header and tail-section keywords may force noise or summary classification depending on store KB",
+      "single-line item_detail patterns must be evaluated before generic item_name fallback"
+    ]
+  },
+  "field_extraction_contract": {
+    "common_base_fields": [
+      "line_idx",
+      "line_text",
+      "normalized_line_text",
+      "line_type"
+    ],
+    "optional_auxiliary_fields": [
+      "store_role",
+      "name_raw",
+      "code",
+      "qty",
+      "unit_price_raw",
+      "price_raw",
+      "discount_raw",
+      "discount_label_raw",
+      "discount_target_raw",
+      "discount_tag_raw",
+      "reference_code_raw",
+      "count_raw",
+      "is_imputed_qty"
+    ],
+    "field_rules": [
+      {
+        "field": "line_idx",
+        "rule": "Original line order index"
+      },
+      {
+        "field": "line_text",
+        "rule": "Original unmodified line text"
+      },
+      {
+        "field": "normalized_line_text",
+        "rule": "Normalized text used for pattern matching"
+      },
+      {
+        "field": "line_type",
+        "rule": "Must be one of common/line_types.json -> line_type_enum"
+      },
+      {
+        "field": "store_role",
+        "rule": "Optional store-specific intermediate role"
+      },
+      {
+        "field": "code",
+        "rule": "Extract only when pattern match confirms code-like segment"
+      },
+      {
+        "field": "qty",
+        "rule": "Extract from explicit qty token or impute according to store policy"
+      },
+      {
+        "field": "unit_price_raw",
+        "rule": "Integer candidate after normalization and numeric casting"
+      },
+      {
+        "field": "price_raw",
+        "rule": "Integer candidate after normalization and numeric casting"
+      },
+      {
+        "field": "discount_raw",
+        "rule": "Integer candidate for discount amount"
+      },
+      {
+        "field": "count_raw",
+        "rule": "Optional numeric candidate for subtotal/count summary lines"
+      },
+      {
+        "field": "is_imputed_qty",
+        "rule": "true only when qty is not explicitly present and is inferred"
+      }
+    ]
+  },
+  "data_contract_requirements": {
+    "coordinate_preservation": {
+      "policy": "Line-level coordinate preservation is required. Character-level mapping is optional unless token-level UI highlighting is required.",
+      "purpose": "To enable UI highlighting and traceability after normalization"
+    },
+    "raw_text_preservation": {
+      "policy": "Original line_text must always be preserved",
+      "purpose": "To avoid loss of semantic hints such as IRC, EXM, PP, [앱], bracket tags, and OCR artifacts"
+    },
+    "traceability": {
+      "policy": "Every normalized and classified line must remain traceable to its original input line",
+      "purpose": "To support debugging, evaluation, and semantic post-processing"
+    },
+    "error_handling": {
+      "on_unknown_line": "Assign line_type=noise",
+      "on_multiple_matches": "Follow store_kb priority; if equal, choose the more specific role over generic noise",
+      "on_field_extraction_failure": "Keep line_type if classification is confident, omit uncertain fields, and preserve raw texts"
+    }
+  },
+  "non_common_role_handling": {
+    "description": "Some store-specific roles do not map directly to final common line_type values",
+    "rules": [
+      "If a store role is declared as non_line_roles in roles_map.json, do not emit it as final line_type.",
+      "Examples include fee, dedupe_policy, validation, normalization, merge_policy, and code policy roles.",
+      "Such roles may be preserved in store_role or handled only at policy/validation layers."
+    ]
+  },
+  "store_specific_notes": {
+    "costco": [
+      "Costco item_detail raw order may be code + qty + unit_price + total_price",
+      "Discount lines may appear as discount_keyword, discount_target, and discount_detail blocks",
+      "T and -T markers must be normalized before numeric casting",
+      "IRC, EXM, PP tags must remain available in raw text for semantic interpretation"
+    ],
+    "emart": [
+      "Emart item_detail raw order is usually code + unit_price + qty + total_price",
+      "Single-line merged item structures are allowed",
+      "Most discount_detail lines are position-based and attach to the previous item in semantic stage",
+      "Receipt-level discounts such as card/app discounts must not be attached to items in parser stage",
+      "Fee-like lines such as 공병 may be preserved as store_role if not supported by common line types"
+    ],
+    "hanaro": [
+      "Hanaro item_detail raw order is usually code + unit_price + qty + total_price",
+      "Code length range is wider and barcode-like patterns are common",
+      "Item discount and receipt discount may coexist",
+      "Duplicate discount resolution is not handled in parser stage",
+      "Bracket tags and discount summary lines may need auxiliary preservation for downstream validation"
+    ]
+  },
+  "parser_output_schema_example": {
+    "metadata": {
+      "store_id": "costco",
+      "version": "1.1.0",
+      "parsed_at": "2026-03-25T13:48:52Z"
+    },
+    "lines": [
+      {
+        "line_idx": 12,
+        "line_text": "650635 1x 9,590 9,590",
+        "normalized_line_text": "650635 1x 9,590 9,590",
+        "store_role": "item_detail",
+        "line_type": "item_detail",
+        "code": "650635",
+        "qty": 1,
+        "unit_price_raw": 9590,
+        "price_raw": 9590,
+        "is_imputed_qty": false
+      },
+      {
+        "line_idx": 13,
+        "line_text": "11816 1x 1,800 1,800-",
+        "normalized_line_text": "11816 1x 1,800 1,800-",
+        "store_role": "discount_detail",
+        "line_type": "discount_detail",
+        "code": "11816",
+        "qty": 1,
+        "discount_raw": 1800,
+        "is_imputed_qty": false
+      },
+      {
+        "line_idx": 14,
+        "line_text": "CPN",
+        "normalized_line_text": "CPN",
+        "store_role": "discount_keyword",
+        "line_type": "discount_detail"
+      },
+      {
+        "line_idx": 15,
+        "line_text": "유기농우유 IRC",
+        "normalized_line_text": "유기농우유 IRC",
+        "store_role": "discount_target",
+        "line_type": "discount_detail",
+        "discount_target_raw": "유기농우유 IRC"
+      }
+    ]
+  },
+  "integration_points": {
+    "semantic_interpreter_handoff": [
+      "The parser MUST NOT group items and discounts.",
+      "The parser MUST NOT calculate final balance or final_price.",
+      "The parser MUST NOT attach discount_detail to item_detail.",
+      "The parser MUST NOT resolve dedupe or receipt-level validation logic.",
+      "All lines, including noise lines, should be preserved for traceability and context.",
+      "Semantic interpretation should actively process only relevant line types."
+    ]
+  },
+  "implementation_notes": [
+    "There is no single common_kb.json file. The parser must use common/line_types.json, common/normalization_rules.json, and store-specific KB files together.",
+    "Store-specific roles may be more detailed than common line types.",
+    "The final parser output must expose only common line_type values, while store_role may be preserved as an auxiliary field.",
+    "Parser output should remain stable even when semantic rules change later.",
+    "If a common line type does not exist for a store-specific concept, preserve it as store_role rather than force-mapping unsafely."
+  ]
+}

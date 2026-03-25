@@ -1,0 +1,252 @@
+{
+  "version": "1.0.0",
+  "description": "Costco discount-related patterns and rules",
+  "line_roles_supported": [
+    "discount_keyword",
+    "discount_target",
+    "discount_detail",
+    "receipt_discount"
+  ],
+  "classification_priority": [
+    "receipt_discount",
+    "discount_detail",
+    "discount_target",
+    "discount_keyword"
+  ],
+  "discount_keywords": {
+    "description": "할인 블록 시작 또는 할인 관련 문맥을 형성하는 키워드",
+    "match_mode": "contains_or_exact",
+    "keywords": [
+      {
+        "value": "CPN",
+        "normalized_value": "CPN",
+        "role": "discount_keyword",
+        "description": "Costco 기본 할인 시작 키워드"
+      },
+      {
+        "value": "자사 쿠폰",
+        "normalized_value": "자사쿠폰",
+        "role": "discount_keyword",
+        "description": "자사 쿠폰 할인 시작 키워드"
+      },
+      {
+        "value": "** 자사 쿠폰",
+        "normalized_value": "자사쿠폰",
+        "role": "discount_keyword",
+        "description": "기호 포함 자사 쿠폰 키워드"
+      },
+      {
+        "value": "*** 자사 쿠폰",
+        "normalized_value": "자사쿠폰",
+        "role": "discount_keyword",
+        "description": "기호 포함 자사 쿠폰 키워드 변형"
+      },
+      {
+        "value": "## MC ON - HDP마스터쿠폰",
+        "normalized_value": "쿠폰",
+        "role": "discount_keyword",
+        "description": "마스터 쿠폰 관련 할인 키워드"
+      },
+      {
+        "value": "쿠폰",
+        "normalized_value": "쿠폰",
+        "role": "discount_keyword",
+        "description": "쿠폰 일반 키워드"
+      }
+    ]
+  },
+  "discount_target_patterns": {
+    "description": "할인 대상 상품명을 나타내는 라인 패턴",
+    "match_mode": "regex_or_keyword_suffix",
+    "patterns": [
+      {
+        "name": "suffix_IRC",
+        "role": "discount_target",
+        "pattern": ".*IRC$",
+        "flags": [],
+        "description": "상품명 뒤 IRC suffix"
+      },
+      {
+        "name": "suffix_EXM",
+        "role": "discount_target",
+        "pattern": ".*EXM$",
+        "flags": [],
+        "description": "상품명 뒤 EXM suffix"
+      },
+      {
+        "name": "suffix_PP",
+        "role": "discount_target",
+        "pattern": ".*PP$",
+        "flags": [],
+        "description": "상품명 뒤 PP suffix"
+      },
+      {
+        "name": "paren_PP",
+        "role": "discount_target",
+        "pattern": ".*\\(PP\\)$",
+        "flags": [],
+        "description": "상품명 뒤 (PP) 형태"
+      },
+      {
+        "name": "contains_IRC_fragment",
+        "role": "discount_target",
+        "pattern": ".*IR[C]?$",
+        "flags": [],
+        "description": "OCR로 IRC가 잘린 경우 대응"
+      }
+    ],
+    "examples": [
+      "유기농우유 IRC",
+      "땅콩빵EXM",
+      "명랑모짜핫도그PP",
+      "임연수1팩(PP)",
+      "KS SHRED MOZZ(IR"
+    ]
+  },
+  "discount_detail_patterns": {
+    "description": "실제 할인 금액이 포함된 상세 라인 패턴",
+    "match_mode": "regex",
+    "patterns": [
+      {
+        "name": "discount_code_qty_unit_discount_trailing_minus",
+        "role": "discount_detail",
+        "pattern": "^(?P<code>\\d{4,7})\\s+(?P<qty>\\d+[xX]?)\\s+(?P<unit_price>[\\d,.\\s]+)\\s+(?P<discount_price>[\\d,.\\s]+)-$",
+        "flags": [],
+        "extract_fields": [
+          "code",
+          "qty",
+          "unit_price",
+          "discount_price"
+        ],
+        "description": "할인 상세라인: 코드 + 수량 + 단가 + 할인금액-"
+      },
+      {
+        "name": "discount_code_qty_unit_discount_trailing_minus_T",
+        "role": "discount_detail",
+        "pattern": "^(?P<code>\\d{4,7})\\s+(?P<qty>\\d+[xX]?)\\s+(?P<unit_price>[\\d,.\\s]+)\\s+(?P<discount_price>[\\d,.\\s]+)-T$",
+        "flags": [],
+        "extract_fields": [
+          "code",
+          "qty",
+          "unit_price",
+          "discount_price"
+        ],
+        "description": "할인 상세라인: 코드 + 수량 + 단가 + 할인금액-T"
+      },
+      {
+        "name": "discount_code_plain_qty_unit_discount_trailing_minus",
+        "role": "discount_detail",
+        "pattern": "^(?P<code>\\d{4,7})\\s+(?P<qty>\\d+)\\s+(?P<unit_price>[\\d,.\\s]+)\\s+(?P<discount_price>[\\d,.\\s]+)-$",
+        "flags": [],
+        "extract_fields": [
+          "code",
+          "qty",
+          "unit_price",
+          "discount_price"
+        ],
+        "description": "x 없는 수량 표기 할인 상세라인"
+      },
+      {
+        "name": "discount_code_plain_qty_unit_discount_trailing_minus_T",
+        "role": "discount_detail",
+        "pattern": "^(?P<code>\\d{4,7})\\s+(?P<qty>\\d+)\\s+(?P<unit_price>[\\d,.\\s]+)\\s+(?P<discount_price>[\\d,.\\s]+)-T$",
+        "flags": [],
+        "extract_fields": [
+          "code",
+          "qty",
+          "unit_price",
+          "discount_price"
+        ],
+        "description": "x 없는 수량 표기 할인 상세라인, -T 포함"
+      }
+    ],
+    "examples": [
+      "11816 1x 1,800 1,800-",
+      "7443 1x 2,200 2,200-",
+      "12135 1x 2,700 2,700-T",
+      "673859 1x 3,000 3,000-T",
+      "001536 1 1500 1.500-T",
+      "004457 1 2500 2.500-T"
+    ]
+  },
+  "receipt_discount_patterns": {
+    "description": "특정 item에 바로 귀속되지 않는 쿠폰/전역 할인 라인",
+    "match_mode": "contains_or_regex",
+    "patterns": [
+      {
+        "name": "coupon_keyword_only",
+        "role": "receipt_discount",
+        "pattern": ".*쿠폰.*",
+        "flags": [],
+        "description": "쿠폰 관련 전역 할인 라인 후보"
+      },
+      {
+        "name": "master_coupon_line",
+        "role": "receipt_discount",
+        "pattern": ".*마스터쿠폰.*",
+        "flags": [],
+        "description": "마스터 쿠폰 관련 전역 할인"
+      }
+    ],
+    "examples": [
+      "## MC ON - HDP마스터쿠폰",
+      "** 자사 쿠폰",
+      "*** 자사 쿠폰"
+    ]
+  },
+  "field_mapping": {
+    "discount_detail": {
+      "code": "code",
+      "qty": "qty",
+      "unit_price_raw": "unit_price",
+      "discount_raw": "discount_price"
+    },
+    "discount_target": {
+      "discount_target_raw": "line_text"
+    },
+    "discount_keyword": {
+      "discount_label_raw": "line_text"
+    },
+    "receipt_discount": {
+      "discount_label_raw": "line_text"
+    }
+  },
+  "normalization_hints": [
+    {
+      "name": "normalize_qty_uppercase_X",
+      "description": "1X -> 1x"
+    },
+    {
+      "name": "normalize_broken_amount_spacing",
+      "description": "1, 700 -> 1,700 / 10, 790 -> 10,790"
+    },
+    {
+      "name": "normalize_dot_separator_amount",
+      "description": "2.500 -> 2,500 / 1.500-T -> 1,500-T"
+    },
+    {
+      "name": "preserve_discount_target_suffix",
+      "description": "IRC / EXM / PP는 semantic 연결에 필요하므로 원문 보존"
+    }
+  ],
+  "semantic_handoff_notes": [
+    "discount_keyword, discount_target, discount_detail은 parser 단계에서 연결하지 않는다",
+    "discount_target이 존재하면 semantic interpreter가 해당 상품으로 귀속을 시도한다",
+    "discount_target이 없으면 semantic interpreter가 직전 상품 귀속 규칙을 적용한다",
+    "receipt_discount는 item_discount와 별도로 유지한다"
+  ],
+  "fallback_rules": [
+    {
+      "condition": "line contains IRC or EXM or PP and does not match item_detail",
+      "assign_role": "discount_target"
+    },
+    {
+      "condition": "line ends with '-' or '-T' and matches discount amount structure",
+      "assign_role": "discount_detail"
+    },
+    {
+      "condition": "line contains CPN or 쿠폰 and does not match discount_detail",
+      "assign_role": "discount_keyword"
+    }
+  ]
+}

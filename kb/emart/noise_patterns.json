@@ -1,0 +1,114 @@
+{
+  "version": "1.1.0",
+  "description": "Emart noise patterns for production-safe parser classification",
+  "line_roles_supported": [
+    "noise"
+  ],
+  "classification_policy": {
+    "priority": "lowest",
+    "description": "noise classification must be applied only after item_detail, discount_detail, receipt_discount, subtotal, and total checks fail"
+  },
+  "rules": {
+    "header_patterns": {
+      "description": "receipt headers and column guide lines",
+      "match_mode": "regex_or_contains",
+      "patterns": [
+        {
+          "name": "column_header_product_name",
+          "pattern": "상품명.*단가.*수량.*금액",
+          "flags": [],
+          "description": "상품명 기준 컬럼 헤더"
+        },
+        {
+          "name": "column_header_product_code",
+          "pattern": "상품코드.*단가.*수량.*금액",
+          "flags": [],
+          "description": "상품코드 기준 컬럼 헤더"
+        }
+      ],
+      "examples": [
+        "상품명 단 가 수량 금 액",
+        "상품코드 단 가 수량 금 액"
+      ]
+    },
+    "seller_info_patterns": {
+      "description": "seller/corner information mixed into item section",
+      "match_mode": "regex",
+      "patterns": [
+        {
+          "name": "business_registration_info",
+          "pattern": "^.+\\s+\\d{3}-\\d{2}-\\d{5}$",
+          "flags": [],
+          "description": "상호/이름 + 사업자등록번호 형식"
+        }
+      ],
+      "examples": [
+        "브라운돈가스 사공훈 104-86-56057"
+      ]
+    },
+    "strict_notice_patterns": {
+      "description": "non-transactional 안내성 문구",
+      "match_mode": "regex_or_contains",
+      "patterns": [
+        {
+          "name": "non_transaction_notice",
+          "pattern": "^\\(*\\**\\)?\\s*면세\\s*물품\\s*[\\d,]+$",
+          "flags": [],
+          "description": "면세 물품 요약 안내"
+        },
+        {
+          "name": "tax_summary_notice",
+          "pattern": "^부\\s*가\\s*세\\s*[\\d,]+$",
+          "flags": [],
+          "description": "부가세 요약 안내"
+        }
+      ],
+      "examples": [
+        "(*)면세 물품 1,450",
+        "(*) 면세 물품 4,960",
+        "부 가 세 1,265"
+      ]
+    }
+  },
+  "safe_guard_rules": [
+    {
+      "name": "protect_item_detail_lines",
+      "rule": "If line matches any item_detail or single_line_item_detail pattern, do not classify as noise",
+      "description": "item_detail must win over noise"
+    },
+    {
+      "name": "protect_item_name_lines",
+      "rule": "If line matches item_name pattern or text-like product line fallback, do not classify as noise",
+      "description": "valid product name lines must not be swallowed by noise"
+    },
+    {
+      "name": "protect_discount_lines",
+      "rule": "If line matches discount_detail or receipt_discount pattern, do not classify as noise",
+      "description": "discount lines must win over noise"
+    },
+    {
+      "name": "protect_summary_lines",
+      "rule": "If line matches subtotal or total pattern, do not classify as noise",
+      "description": "summary lines must be handled by summary_patterns.json"
+    }
+  ],
+  "fallback_policy": {
+    "description": "Only assign noise after all item, discount, and summary classifications fail",
+    "action": "assign_role=noise"
+  },
+  "output_policy": {
+    "preserve_in_parser_output": true,
+    "line_type": "noise",
+    "description": "noise lines should remain in parser output for traceability and debugging"
+  },
+  "parser_notes": [
+    "Do not classify text-only lines as noise by default because valid item_name lines often contain no numeric structure.",
+    "Do not classify summary-like lines as noise before checking summary_patterns.json.",
+    "Do not use broad heuristics such as 'non-numeric text means noise'.",
+    "Header lines may be split by OCR spacing, so matching should allow loose spacing."
+  ],
+  "semantic_notes": [
+    "noise lines are not active semantic targets",
+    "noise lines should still be preserved for traceability and debugging"
+  ]
+}
