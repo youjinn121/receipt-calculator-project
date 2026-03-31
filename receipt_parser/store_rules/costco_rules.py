@@ -30,21 +30,50 @@ ITEM_PATTERNS = [
 ]
 
 
+
+
+
 # =========================================================
 # DISCOUNT DETAIL PATTERNS (robust)
 # =========================================================
+# 대응 케이스:
 # 11816 1x 1,800 1,800-
 # 004457 1 2500 2,500-T
-# 11816 1x 1,800 1,800-
+# 673859 1x 3,000 3,000-T
+# 24164 1x 1,700 1,700-
+# (qty 없는 변형 대응)
+# 123456 1800 1,800-
+# 123456 2500 2,500-T
 
 DISCOUNT_PATTERNS = [
+    # code + qty + unit_price + price-
     re.compile(
         r"^(?P<code>\d{4,7})\s+"
         r"(?P<qty>\d+\s*[xX]?)\s+"
         r"(?P<unit_price>[\d,]+)\s+"
-        r"(?P<price>[\d,]+)"
-        r"\s*[-]"
-        r"(?:T)?$"
+        r"(?P<price>[\d,]+)\s*-$"
+    ),
+
+    # code + qty + unit_price + price-T / T-
+    re.compile(
+        r"^(?P<code>\d{4,7})\s+"
+        r"(?P<qty>\d+\s*[xX]?)\s+"
+        r"(?P<unit_price>[\d,]+)\s+"
+        r"(?P<price>[\d,]+)\s*(?:-T|T-)$"
+    ),
+
+    # code + unit_price + price- (qty 없음 → 1)
+    re.compile(
+        r"^(?P<code>\d{4,7})\s+"
+        r"(?P<unit_price>[\d,]+)\s+"
+        r"(?P<price>[\d,]+)\s*-$"
+    ),
+
+    # code + unit_price + price-T / T- (qty 없음 → 1)
+    re.compile(
+        r"^(?P<code>\d{4,7})\s+"
+        r"(?P<unit_price>[\d,]+)\s+"
+        r"(?P<price>[\d,]+)\s*(?:-T|T-)$"
     ),
 ]
 
@@ -57,6 +86,7 @@ DISCOUNT_PATTERNS = [
 DISCOUNT_KEYWORDS = {
     "CPN",
     "자사 쿠폰",
+    "쿠폰",
     "마스터쿠폰",
 }
 
@@ -68,6 +98,7 @@ DISCOUNT_TARGET_SUFFIX = {
 }
 
 
+
 # =========================================================
 # SUMMARY / TOTAL
 # =========================================================
@@ -75,6 +106,8 @@ DISCOUNT_TARGET_SUFFIX = {
 SUBTOTAL_KEYWORDS = {
     "상품수 소계",
     "Sub-총상품수",
+    "Sub-총상품",
+    "총상품",
     "총상품수",
 }
 

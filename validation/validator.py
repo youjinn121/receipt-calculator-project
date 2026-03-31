@@ -4,28 +4,6 @@ from typing import Any, Dict, List, Optional
 
 
 def validate_receipt(semantic_receipt: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    semantic 결과를 검증한다.
-
-    입력:
-    {
-      "file_name": "...",
-      "store": "...",
-      "items": [...],
-      "tail_info": {...}
-    }
-
-    출력:
-    {
-      "file_name": "...",
-      "store": "...",
-      "is_valid": True/False,
-      "item_validation": {...},
-      "receipt_validation": {...},
-      "errors": [...],
-      "warnings": [...],
-    }
-    """
     items = semantic_receipt.get("items", [])
     tail_info = semantic_receipt.get("tail_info", {})
 
@@ -51,23 +29,25 @@ def validate_receipt(semantic_receipt: Dict[str, Any]) -> Dict[str, Any]:
             "invalid_item_count": item_result["invalid_item_count"],
         },
         "receipt_validation": {
-            "computed_final_price_sum": receipt_result["computed_final_price_sum"],
-            "receipt_total": receipt_result["receipt_total"],
             "total_match": receipt_result["total_match"],
-            "item_count": receipt_result["item_count"],
-            "subtotal_count_sum": receipt_result["subtotal_count_sum"],
-            "subtotal_count_match": receipt_result["subtotal_count_match"],
             "subtotal_segment_match": receipt_result["subtotal_segment_match"],
+        },
+        "debug": {
+            "receipt_validation": {
+                "computed_final_price_sum": receipt_result["computed_final_price_sum"],
+                "receipt_total": receipt_result["receipt_total"],
+                "receipt_total_source": receipt_result["receipt_total_source"],
+                "item_count": receipt_result["item_count"],
+                "item_qty_sum": receipt_result["item_qty_sum"],
+                "subtotal_count_sum": receipt_result["subtotal_count_sum"],
+                "subtotal_count_match": receipt_result["subtotal_count_match"],
+            },
             "subtotal_segment_results": receipt_result["subtotal_segment_results"],
         },
         "errors": errors,
         "warnings": warnings,
     }
 
-
-# =========================================================
-# Item-level validation
-# =========================================================
 
 def _validate_items(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     errors: List[Dict[str, Any]] = []
@@ -87,9 +67,6 @@ def _validate_items(items: List[Dict[str, Any]]) -> Dict[str, Any]:
         unit_price = item.get("unit_price")
         qty = item.get("qty")
 
-        # =========================================================
-        # 1️⃣ 필수값 체크
-        # =========================================================
         if base_price is None or final_price is None:
             invalid_item_count += 1
             errors.append({
@@ -101,9 +78,6 @@ def _validate_items(items: List[Dict[str, Any]]) -> Dict[str, Any]:
             })
             continue
 
-        # =========================================================
-        # 2️⃣ 할인 계산 검증
-        # =========================================================
         expected_final = base_price - discount
 
         if expected_final != final_price:
@@ -119,9 +93,6 @@ def _validate_items(items: List[Dict[str, Any]]) -> Dict[str, Any]:
             })
             continue
 
-        # =========================================================
-        # 3️⃣ unit_price × qty 검증
-        # =========================================================
         if (
             isinstance(unit_price, int)
             and isinstance(qty, int)
@@ -139,10 +110,6 @@ def _validate_items(items: List[Dict[str, Any]]) -> Dict[str, Any]:
                     "actual_base_price": base_price,
                     "item": item,
                 })
-
-        # =========================================================
-        # 4️⃣ 기타 경고
-        # =========================================================
 
         if qty is None:
             warnings.append({
@@ -173,10 +140,6 @@ def _validate_items(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-# =========================================================
-# Receipt-level validation
-# =========================================================
-
 def _validate_receipt_totals(
     items: List[Dict[str, Any]],
     tail_info: Dict[str, Any],
@@ -185,7 +148,10 @@ def _validate_receipt_totals(
     warnings: List[Dict[str, Any]] = []
 
     computed_final_price_sum = _sum_final_prices(items)
-    receipt_total = _extract_receipt_total_from_tail_info(tail_info)
+
+    receipt_total_info = _extract_receipt_total_from_tail_info(tail_info)
+    receipt_total = receipt_total_info["receipt_total"]
+    receipt_total_source = receipt_total_info["receipt_total_source"]
 
     total_match: Optional[bool] = None
 
@@ -203,11 +169,14 @@ def _validate_receipt_totals(
                 "reason": "sum(item.final_price) != receipt_total",
                 "computed_final_price_sum": computed_final_price_sum,
                 "receipt_total": receipt_total,
+                "receipt_total_source": receipt_total_source,
             })
 
     item_count = len(items)
     subtotal_count_sum = _sum_subtotal_counts_from_tail_info(tail_info)
     subtotal_count_match: Optional[bool] = None
+
+    item_qty_sum = _sum_item_qty(items)
 
     if subtotal_count_sum is None:
         warnings.append({
@@ -215,13 +184,14 @@ def _validate_receipt_totals(
             "reason": "subtotal_count를 찾지 못했습니다.",
         })
     else:
-        subtotal_count_match = (item_count == subtotal_count_sum)
+        subtotal_count_match = (item_qty_sum == subtotal_count_sum)
 
         if not subtotal_count_match:
             warnings.append({
                 "level": "receipt",
-                "reason": "len(items) != sum(subtotal_count)",
+                "reason": "sum(item.qty) != sum(subtotal_count)",
                 "item_count": item_count,
+                "item_qty_sum": item_qty_sum,
                 "subtotal_count_sum": subtotal_count_sum,
             })
 
@@ -257,8 +227,10 @@ def _validate_receipt_totals(
     return {
         "computed_final_price_sum": computed_final_price_sum,
         "receipt_total": receipt_total,
+        "receipt_total_source": receipt_total_source,
         "total_match": total_match,
         "item_count": item_count,
+        "item_qty_sum": item_qty_sum,
         "subtotal_count_sum": subtotal_count_sum,
         "subtotal_count_match": subtotal_count_match,
         "subtotal_segment_match": subtotal_segment_match,
@@ -267,10 +239,6 @@ def _validate_receipt_totals(
         "warnings": warnings,
     }
 
-
-# =========================================================
-# Utility
-# =========================================================
 
 def _sum_final_prices(items: List[Dict[str, Any]]) -> int:
     total = 0
@@ -281,35 +249,51 @@ def _sum_final_prices(items: List[Dict[str, Any]]) -> int:
     return total
 
 
-def _extract_receipt_total_from_tail_info(tail_info: Dict[str, Any]) -> Optional[int]:
+def _extract_receipt_total_from_tail_info(tail_info: Dict[str, Any]) -> Dict[str, Any]:
     """
-    tail_info["total_lines"]에서 receipt total 추출
-    현재 parser 구조 기준:
-    total line의 price_raw 사용
+    receipt total 추출 우선순위:
+    1) tail_info["total_lines"]의 마지막 유효 price_raw
+    2) tail_info["subtotal_summary"]["last_subtotal_amount"]
+    3) tail_info["subtotal_lines"]의 마지막 유효 price_raw
+
+    현재 정책:
+    - subtotal 금액은 누적 값이므로 마지막 subtotal 금액을 사용한다.
     """
     total_lines = tail_info.get("total_lines", [])
-    if not total_lines:
-        return None
 
-    # 마지막 total line 우선 사용
     for line in reversed(total_lines):
         price_raw = line.get("price_raw")
         if isinstance(price_raw, int):
-            return price_raw
+            return {
+                "receipt_total": price_raw,
+                "receipt_total_source": "total_lines_last_price_raw",
+            }
 
-    return None
+    subtotal_summary = tail_info.get("subtotal_summary", {})
+    last_subtotal_amount = subtotal_summary.get("last_subtotal_amount")
+
+    if isinstance(last_subtotal_amount, int):
+        return {
+            "receipt_total": last_subtotal_amount,
+            "receipt_total_source": "subtotal_last_amount",
+        }
+
+    subtotal_lines = tail_info.get("subtotal_lines", [])
+    for line in reversed(subtotal_lines):
+        price_raw = line.get("price_raw")
+        if isinstance(price_raw, int):
+            return {
+                "receipt_total": price_raw,
+                "receipt_total_source": "subtotal_lines_last_price_raw",
+            }
+
+    return {
+        "receipt_total": None,
+        "receipt_total_source": None,
+    }
 
 
 def _sum_subtotal_counts_from_tail_info(tail_info: Dict[str, Any]) -> Optional[int]:
-    """
-    tail_info["subtotal_lines"]에서 subtotal_count를 모두 합산한다.
-
-    예:
-    - 상품수 소계 : 10
-    - (Sub-총상품수 : 13) 144420
-
-    subtotal_count가 하나도 없으면 None 반환
-    """
     subtotal_lines = tail_info.get("subtotal_lines", [])
     if not subtotal_lines:
         return None
@@ -331,15 +315,6 @@ def _validate_subtotal_segments(
     items: List[Dict[str, Any]],
     tail_info: Dict[str, Any],
 ) -> List[Dict[str, Any]]:
-    """
-    subtotal 구간 검증
-
-    규칙:
-    - 상품수 소계: 직전 subtotal 다음부터 현재 subtotal 전까지의 item qty 합과 비교
-    - Sub-총상품수 / Sub-총싱품수 / Sub-총상품: receipt 시작부터 현재 subtotal 전까지의 누적 item qty 합과 비교
-    - 할인 detail qty는 제외해야 하므로 semantic item의 qty만 사용한다.
-    - semantic item의 source_line_indices 첫 번째 값은 item_detail line_idx라고 가정한다.
-    """
     subtotal_lines = tail_info.get("subtotal_lines", [])
     if not subtotal_lines:
         return []
@@ -403,36 +378,10 @@ def _validate_subtotal_segments(
 
 
 def _detect_subtotal_count_mode(subtotal_line: Dict[str, Any]) -> str:
-    """
-    subtotal 라인의 count 해석 모드 판별
-
-    반환:
-    - "segment": 상품수 소계
-    - "cumulative": Sub-총상품수 / Sub-총싱품수 / Sub-총상품
-    """
-    text = (
-        subtotal_line.get("normalized_line_text")
-        or subtotal_line.get("line_text")
-        or ""
-    )
-    compact = str(text).replace(" ", "").lower()
-
-    if "sub-총상품수" in compact or "sub-총싱품수" in compact or "sub-총상품" in compact:
-        return "cumulative"
-
     return "segment"
 
 
 def _extract_item_detail_line_idx(item: Dict[str, Any]) -> Optional[int]:
-    """
-    semantic item에서 item_detail line_idx 추출
-
-    현재 구조:
-    - item 생성 시 source_line_indices = [item_detail_line_idx]
-    - 이후 discount가 붙으면 source_line_indices에 discount_detail line_idx가 append 됨
-
-    따라서 첫 번째 source_line_indices를 item_detail line_idx로 사용한다.
-    """
     source_line_indices = item.get("source_line_indices", [])
     if not source_line_indices:
         return None
@@ -442,3 +391,12 @@ def _extract_item_detail_line_idx(item: Dict[str, Any]) -> Optional[int]:
         return first_idx
 
     return None
+
+
+def _sum_item_qty(items: List[Dict[str, Any]]) -> int:
+    total = 0
+    for item in items:
+        qty = item.get("qty")
+        if isinstance(qty, int):
+            total += qty
+    return total

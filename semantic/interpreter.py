@@ -29,9 +29,8 @@ def interpret_receipt(parsed_receipt: Dict[str, Any]) -> Dict[str, Any]:
     pending_discount_keyword: Optional[str] = None
     pending_discount_target: Optional[str] = None
 
-    # 🔥 추가:
-    # discount_detail 직전 item_name fallback용
-    last_seen_item_name_line: Optional[Dict[str, Any]] = None
+    # discount_detail fallback용: 가장 최근 completed item 기억
+    last_completed_item: Optional[Dict[str, Any]] = None
 
     tail_info = {
         "subtotal_lines": [],
@@ -57,9 +56,6 @@ def interpret_receipt(parsed_receipt: Dict[str, Any]) -> Dict[str, Any]:
                 or line.get("line_text")
             )
 
-            # 최근 item_name line 기억
-            last_seen_item_name_line = line
-
             # =========================================================
             # 1) discount_keyword 다음 줄 item_name → discount_target
             # ex)
@@ -81,6 +77,9 @@ def interpret_receipt(parsed_receipt: Dict[str, Any]) -> Dict[str, Any]:
                 pending_item_name=pending_item_name,
             )
             items.append(item)
+
+            # 최근 completed item 기억
+            last_completed_item = item
 
             # item이 만들어졌으면 name pending 해제
             pending_item_name = None
@@ -104,19 +103,12 @@ def interpret_receipt(parsed_receipt: Dict[str, Any]) -> Dict[str, Any]:
         if line_type == "discount_detail":
             # =========================================================
             # 2) discount_keyword도 없고 explicit target도 없으면
-            #    discount_detail 직전 item_name을 fallback target으로 사용
-            #
-            # ex)
-            #   정통어묵탕모듬
-            #   641491 1x 2,600 2,600-T
+            #    discount_detail 직전 completed item을 fallback target으로 사용
             # =========================================================
-            if not pending_discount_target and last_seen_item_name_line is not None:
-                fallback_target_name = (
-                    last_seen_item_name_line.get("name_raw")
-                    or last_seen_item_name_line.get("normalized_line_text")
-                    or last_seen_item_name_line.get("line_text")
-                )
-                pending_discount_target = fallback_target_name
+            if not pending_discount_target and last_completed_item is not None:
+                fallback_target_name = last_completed_item.get("name")
+                if fallback_target_name:
+                    pending_discount_target = fallback_target_name
 
             _attach_discount_to_item(
                 items=items,

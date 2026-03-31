@@ -47,12 +47,12 @@ def classify_line(
         return "discount_keyword"
 
     # =========================================================
-    # 6) discount detail (휴리스틱 + 패턴)
+    # 6) discount detail (패턴 우선 + 강화된 휴리스틱)
     # =========================================================
-    if _is_discount_detail_line(text):
+    if _matches_any_pattern(text, store_rules.get("discount_patterns", [])):
         return "discount_detail"
 
-    if _matches_any_pattern(text, store_rules.get("discount_patterns", [])):
+    if _is_discount_detail_line(text):
         return "discount_detail"
 
     # =========================================================
@@ -124,18 +124,65 @@ def _is_item_detail_line(text: str) -> bool:
 # =========================================================
 def _is_discount_detail_line(text: str) -> bool:
     """
-    조건:
-    - 끝이 '-' (할인)
-    - 또는 -T
+    discount_detail 휴리스틱 (강화 버전)
+
+    허용 조건:
+    1) 숫자-, 숫자-T, T- 같은 끝쪽 할인 표식
+    2) 또는 코드/수량/금액 후보 중 2개 이상 + 할인 표식 존재
+
+    금지:
+    - 단순히 '-'와 숫자가 같이 있다고 바로 할인으로 보지 않음
+      ex) KS새우31-40 908G
     """
-    if text.endswith("-"):
+    tokens = text.split()
+    if not tokens:
+        return False
+
+    compact = _normalize_space(text)
+
+    # ---------------------------------------------------------
+    # 1) 끝쪽 할인 표식: 숫자-, 숫자-T, 숫자 T-
+    # ---------------------------------------------------------
+    if re.search(r"[\d,]+(?:-|-T|T-)\s*$", compact):
         return True
 
-    if text.endswith("-T") or text.endswith("T-"):
-        return True
+    # ---------------------------------------------------------
+    # 2) 구조 후보 계산: 코드 / 수량 / 금액
+    # ---------------------------------------------------------
+    code_candidate = False
+    qty_candidate = False
+    price_candidate_count = 0
 
-    # 가격인데 음수 표현 포함
-    if "-" in text and re.search(r"\d", text):
+    for token in tokens:
+        stripped = token.strip()
+
+        if re.fullmatch(r"\d{4,7}", stripped):
+            code_candidate = True
+
+        if re.fullmatch(r"\d+[xX]?", stripped):
+            qty_candidate = True
+
+        if re.fullmatch(r"[\d,]+(?:T)?", stripped):
+            price_candidate_count += 1
+
+    structure_score = 0
+    if code_candidate:
+        structure_score += 1
+    if qty_candidate:
+        structure_score += 1
+    if price_candidate_count >= 1:
+        structure_score += 1
+
+    # ---------------------------------------------------------
+    # 3) 할인 표식이 있고 구조도 어느 정도 갖춘 경우만 허용
+    #    단순 -숫자 는 여기서 바로 discount_detail로 보지 않음
+    # ---------------------------------------------------------
+    has_discount_marker = (
+        "-" in compact
+        and not re.search(r"-\s*\d", compact)  # 선행 마이너스 금액은 제외
+    )
+
+    if has_discount_marker and structure_score >= 2:
         return True
 
     return False
@@ -147,6 +194,9 @@ def _is_discount_keyword_line(text: str, store_rules: Any) -> bool:
     for kw in store_rules.get("discount_keywords", []):
         normalized_kw = _normalize_space(kw).upper()
         if normalized == normalized_kw:
+            return True
+
+        if normalized_kw and normalized_kw in normalized:
             return True
 
     return False
