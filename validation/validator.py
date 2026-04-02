@@ -1,3 +1,37 @@
+"""
+[Validator 역할 정의]
+
+이 모듈은 "정산 결과 검증"을 담당한다.
+
+검증 종류:
+
+1) item 단위 검증
+   - base_price - discount == final_price
+
+2) receipt 단위 검증
+   - total_lines 존재 시 → total 기준 검증
+   - 없으면 subtotal fallback
+
+3) subtotal segment 검증
+   - Sub-총상품수 계열은 segment 방식
+   - 구간별 item qty 합 == subtotal_count
+
+추가 체크:
+- unconsumed line 존재 여부
+- numeric-only orphan line
+- item_name이 detail 없이 끝난 케이스
+
+주의:
+- validation은 실패 여부 판단 역할
+- 데이터 수정/보정은 하지 않음
+
+출력:
+- is_valid
+- errors
+- warnings
+- debug 정보
+"""
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
@@ -18,11 +52,15 @@ def validate_receipt(semantic_receipt: Dict[str, Any]) -> Dict[str, Any]:
     warnings.extend(item_result["warnings"])
     warnings.extend(receipt_result["warnings"])
 
+    recapture_info = _build_recapture_decision(errors, warnings)
+
     return {
         "file_name": semantic_receipt.get("file_name", ""),
         "file_meta": semantic_receipt.get("file_meta", {}),
         "store": semantic_receipt.get("store", ""),
         "is_valid": len(errors) == 0,
+        "recapture_recommended": recapture_info["recapture_recommended"],
+        "recapture_reasons": recapture_info["reasons"],
         "item_validation": {
             "checked_item_count": item_result["checked_item_count"],
             "valid_item_count": item_result["valid_item_count"],
@@ -43,6 +81,10 @@ def validate_receipt(semantic_receipt: Dict[str, Any]) -> Dict[str, Any]:
                 "subtotal_count_match": receipt_result["subtotal_count_match"],
             },
             "subtotal_segment_results": receipt_result["subtotal_segment_results"],
+            "recapture_decision": {
+                "trigger_count": recapture_info["trigger_count"],
+                "reasons": recapture_info["reasons"],
+            },
         },
         "errors": errors,
         "warnings": warnings,
@@ -400,3 +442,74 @@ def _sum_item_qty(items: List[Dict[str, Any]]) -> int:
         if isinstance(qty, int):
             total += qty
     return total
+
+
+
+def _build_recapture_decision(
+    errors: List[Dict[str, Any]],
+    warnings: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    재촬영 권고 기준:
+
+    아래 신호 중 2개 이상이면 recapture_recommended = True
+    1) item 필수값 누락
+    2) receipt total mismatch
+    3) item qty 합 != subtotal count 합
+    4) subtotal segment mismatch
+    5) item 산술 불일치 (unit_price * qty != base_price)
+    """
+    reasons: List[str] = []
+
+    # 1) item 필수값 누락
+    has_missing_item_core = any(
+        err.get("level") == "item"
+        and err.get("reason") == "base_price 또는 final_price가 없습니다."
+        for err in errors
+    )
+    if has_missing_item_core:
+        reasons.append("item_core_value_missing")
+
+    # 2) receipt total mismatch
+    has_receipt_total_mismatch = any(
+        err.get("level") == "receipt"
+        and err.get("reason") == "sum(item.final_price) != receipt_total"
+        for err in errors
+    )
+    if has_receipt_total_mismatch:
+        reasons.append("receipt_total_mismatch")
+
+    # 3) item qty sum != subtotal count sum
+    has_qty_sum_mismatch = any(
+        warn.get("level") == "receipt"
+        and warn.get("reason") == "sum(item.qty) != sum(subtotal_count)"
+        for warn in warnings
+    )
+    if has_qty_sum_mismatch:
+        reasons.append("item_qty_sum_mismatch")
+
+    # 4) subtotal segment mismatch
+    has_subtotal_segment_mismatch = any(
+        warn.get("level") == "receipt"
+        and warn.get("reason") == "subtotal 구간 qty 합 != subtotal_count"
+        for warn in warnings
+    )
+    if has_subtotal_segment_mismatch:
+        reasons.append("subtotal_segment_mismatch")
+
+    # 5) item 산술 불일치
+    has_item_price_mismatch = any(
+        warn.get("level") == "item"
+        and warn.get("reason") == "unit_price * qty != base_price"
+        for warn in warnings
+    )
+    if has_item_price_mismatch:
+        reasons.append("item_price_mismatch")
+
+    trigger_count = len(reasons)
+
+    return {
+        "recapture_recommended": trigger_count >= 2,
+        "trigger_count": trigger_count,
+        "reasons": reasons,
+    }

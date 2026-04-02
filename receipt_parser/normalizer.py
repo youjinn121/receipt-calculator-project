@@ -1,3 +1,31 @@
+"""
+[Normalizer 역할 정의]
+
+이 모듈은 "문자열 형태 정리"만 담당한다.
+절대 의미 해석(semantic)을 수행하지 않는다.
+
+책임 범위:
+- 공백/특수문자 정리
+- 숫자 포맷 정규화 (예: 10, 790 → 10,790)
+- 수량 토큰 정리 (예: 1 x → 1x)
+- OCR 깨짐 보정 (예: 총 싱품수 → 총상품수)
+
+금지:
+- line_type 판단 금지
+- item / discount 생성 금지
+- 할인 귀속 처리 금지
+- subtotal / total 판단 금지
+
+중요 원칙:
+- "패턴 매칭 성공률을 높이기 위한 전처리"까지만 수행
+- 의미 정보(IRC, EXM, PP 등)는 절대 제거하지 않는다
+- 특히 suffix/prefix(IRC, EXM, PP)는 semantic에서 사용되므로 유지한다
+
+출력:
+- normalize_line: 패턴 매칭용 텍스트
+- cleanup_name_candidate: name 후보 전용 정리 결과
+"""
+
 from __future__ import annotations
 
 import re
@@ -82,7 +110,7 @@ def normalize_line(line_text: str, store: str, store_rules: object | None = None
         print(f"[normalize_line][after _normalize_costco_line_safe] {repr(text)}")
 
     text = re.sub(r"\s+", " ", text)
-    
+
     return text.strip()
 
 

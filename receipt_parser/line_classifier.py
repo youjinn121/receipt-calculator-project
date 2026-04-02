@@ -1,3 +1,48 @@
+"""
+[Line Classifier 역할 정의]
+
+이 모듈은 line 단위의 "타입 분류"만 담당한다.
+
+책임 범위:
+- line_type 결정
+  - item_name
+  - item_detail
+  - discount_keyword
+  - discount_target
+  - discount_detail
+  - subtotal
+  - total
+  - noise
+
+금지:
+- 값 추출 금지 (code, price 등)
+- item 생성 금지
+- 할인 귀속 금지
+- semantic 해석 금지
+
+분류 우선순위:
+1) noise
+2) subtotal / total
+3) discount_keyword
+4) discount_detail
+5) item_detail
+6) discount_target
+7) fallback → item_name
+
+discount_target 규칙:
+- suffix: "상품명 IRC", "상품명EXM"
+- prefix: "IRC 상품명", "EXM상품명"
+- 공백 유무 모두 허용
+- 단, 토큰 형태(독립 태그)만 인정 (단순 포함 금지)
+
+주의:
+- "IRC 포함"으로 판단하면 안 됨
+- 반드시 prefix/suffix 형태만 target으로 인정
+
+출력:
+- line_type만 결정 (다른 필드는 extractor에서 처리)
+"""
+
 from __future__ import annotations
 
 import re
@@ -30,8 +75,11 @@ def classify_line(
 
     # =========================================================
     # 3) total
+    # 반드시 "합계"로 시작하는 경우만 total
+    # ex) "합계 375,880", "합계 (VAT 포함) 288,190"
+    # 비허용: "쿠폰합계 7 24,200"
     # =========================================================
-    if _contains_any_keyword(text, store_rules.get("total_keywords", [])):
+    if _is_total_line(text):
         return "total"
 
     # =========================================================
@@ -77,6 +125,38 @@ def classify_line(
 
 
 # =========================================================
+# End-section helper
+# parser 메인 루프에서 이 함수가 True면
+# 해당 줄까지 저장하고 break 하면 됨
+# 우선순위:
+# 1) 합계
+# 2) 부가세
+# 3) 과세
+# 4) 면세
+# =========================================================
+def is_end_section_line(text: str) -> bool:
+    return _get_end_section_priority(text) is not None
+
+
+def _get_end_section_priority(text: str) -> int | None:
+    normalized = _normalize_space(text)
+
+    if normalized.startswith("합계"):
+        return 1
+
+    if normalized.startswith("부가세"):
+        return 2
+
+    if normalized.startswith("과세"):
+        return 3
+
+    if normalized.startswith("면세"):
+        return 4
+
+    return None
+
+
+# =========================================================
 # Internal helpers
 # =========================================================
 
@@ -93,8 +173,23 @@ def _is_noise_line(raw: str, text: str, store_rules: Any) -> bool:
     return False
 
 
+def _is_total_line(text: str) -> bool:
+    """
+    total은 반드시 '합계'로 시작하는 경우만 허용한다.
+
+    허용:
+    - 합계 375,880
+    - 합계 (VAT 포함) 288,190
+
+    비허용:
+    - 쿠폰합계 7 24,200
+    """
+    normalized = _normalize_space(text)
+    return normalized.startswith("합계")
+
+
 # =========================================================
-# 🔥 핵심 추가 1: item_detail 휴리스틱
+#  핵심 추가 1: item_detail 휴리스틱
 # =========================================================
 def _is_item_detail_line(text: str) -> bool:
     """
@@ -120,7 +215,7 @@ def _is_item_detail_line(text: str) -> bool:
 
 
 # =========================================================
-# 🔥 핵심 추가 2: discount_detail 휴리스틱
+#  핵심 추가 2: discount_detail 휴리스틱
 # =========================================================
 def _is_discount_detail_line(text: str) -> bool:
     """
@@ -204,19 +299,37 @@ def _is_discount_keyword_line(text: str, store_rules: Any) -> bool:
 
 def _is_discount_target_line(text: str, store_rules: Any) -> bool:
     suffixes = store_rules.get("discount_target_suffix", set())
+    prefixes = store_rules.get("discount_target_prefix", set())
 
-    if not suffixes:
+    if not suffixes and not prefixes:
         return False
 
     upper_text = _normalize_space(text).upper()
+    if not upper_text:
+        return False
 
+    tokens = upper_text.split()
+    first = tokens[0] if tokens else ""
+    last = tokens[-1] if tokens else ""
+
+    # suffix: "상품명 IRC", "상품명IRC"
     for suffix in suffixes:
-        suffix_upper = str(suffix).strip().upper()
+        s = str(suffix).strip().upper()
 
-        if upper_text.endswith(" " + suffix_upper):
+        if last == s and len(tokens) > 1:
             return True
 
-        if upper_text.endswith(suffix_upper) and upper_text != suffix_upper:
+        if upper_text.endswith(s) and upper_text != s:
+            return True
+
+    # prefix: "IRC 상품명", "IRC상품명"
+    for prefix in prefixes:
+        p = str(prefix).strip().upper()
+
+        if first == p and len(tokens) > 1:
+            return True
+
+        if upper_text.startswith(p) and upper_text != p:
             return True
 
     return False

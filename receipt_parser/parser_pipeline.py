@@ -193,6 +193,10 @@ def build_structured_line(
         "discount_raw": extracted.get("discount_raw"),
         "name_raw": extracted.get("name_raw"),
         "subtotal_count": extracted.get("subtotal_count"),
+        "is_restored": extracted.get("is_restored", False),
+        "restore_reason": extracted.get("restore_reason"),
+        "restored_fields": extracted.get("restored_fields", []),
+
     }
 
 

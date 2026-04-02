@@ -90,13 +90,18 @@ DISCOUNT_KEYWORDS = {
     "마스터쿠폰",
 }
 
-# 할인 대상 suffix
+# 할인 대상 suffix / prefix
 DISCOUNT_TARGET_SUFFIX = {
     "IRC",
     "EXM",
     "PP",
 }
 
+DISCOUNT_TARGET_PREFIX = {
+    "IRC",
+    "EXM",
+    "PP",
+}
 
 
 # =========================================================
@@ -155,6 +160,7 @@ COSTCO_RULES = {
     # 키워드
     "discount_keywords": DISCOUNT_KEYWORDS,
     "discount_target_suffix": DISCOUNT_TARGET_SUFFIX,
+    "discount_target_prefix": DISCOUNT_TARGET_PREFIX,
 
     "subtotal_keywords": SUBTOTAL_KEYWORDS,
     "total_keywords": TOTAL_KEYWORDS,

@@ -1002,17 +1002,28 @@ def trim_receipt_body(receipts):
 
         start_idx = protected_idxs[0] if protected_idxs else 0
 
-        last_end_idx = None
+        # 종료 포인트 우선순위 기반 탐색
+        end_idx = len(lines) - 1
+        best_priority = None
 
         for i in range(start_idx, len(line_texts)):
             text = line_texts[i]
-            for kw in END_KEYWORDS:
-                if fuzzy_contains(text, kw, END_SIM_THRESHOLD):
-                    last_end_idx = i
+            priority = get_end_section_priority(text)
 
-        end_idx = len(lines) - 1 if last_end_idx is None else last_end_idx
+            if priority is None:
+                continue
+
+            # 가장 높은 우선순위(숫자 낮은 것)만 채택
+            if best_priority is None or priority < best_priority:
+                best_priority = priority
+                end_idx = i
+
+                # 1순위 (합계) 나오면 바로 종료
+                if priority == 1:
+                    break
 
         receipt["lines"] = lines[start_idx:end_idx + 1]
+
         receipt["cut_meta"] = {
             "start_idx": start_idx,
             "end_idx": end_idx,
@@ -1149,3 +1160,25 @@ if __name__ == "__main__":
         input_folder="./raw_json",
         output_folder="./parsed_output"
     )
+
+
+def get_end_section_priority(text):
+    text = normalize_text(text)
+
+    # 1순위: 합계
+    if text.startswith(normalize_text("합계")):
+        return 1
+
+    # 2순위: 부가세
+    if text.startswith(normalize_text("부가세")):
+        return 2
+
+    # 3순위: 과세
+    if text.startswith(normalize_text("과세")):
+        return 3
+
+    # 4순위: 면세
+    if text.startswith(normalize_text("면세")):
+        return 4
+
+    return None

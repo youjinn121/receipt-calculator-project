@@ -1,3 +1,44 @@
+"""
+[Semantic Interpreter 역할 정의]
+
+이 모듈은 "line들을 조합해서 item 구조 생성"을 담당한다.
+
+책임 범위:
+- item_name + item_detail → item 생성
+- discount_keyword / discount_target / discount_detail → item에 귀속
+- 명시적 target 없으면 직전 item에 귀속
+- name 정리 및 최종 item 구조 생성
+
+핵심 규칙:
+1) item 생성
+   - item_name + item_detail 결합
+   - name은 cleanup_name_candidate 결과 사용
+
+2) discount 귀속
+   - discount_target 존재 → 해당 item에 귀속
+   - 없으면 직전 completed item에 귀속
+
+3) discount 값
+   - discount_raw를 우선 사용
+   - 없으면 price_raw fallback 가능
+
+4) suffix/prefix 제거
+   - IRC / EXM / PP는 최종 item name에서는 제거 가능
+   - 단, discount_target 판단에는 사용됨
+
+5) orphan line 처리
+   - semantic에서 소비되지 않은 line은 별도 관리
+   - 숫자-only / 고립 item_name은 warning 대상
+
+금지:
+- line_type 재판정 금지
+- raw 텍스트 수정 금지
+
+출력:
+- item 리스트
+- discount_meta 포함
+"""
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
