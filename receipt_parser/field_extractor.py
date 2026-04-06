@@ -44,18 +44,27 @@ def extract_fields(
       - qty=1인 할인 라인은 unit_price_raw / price_raw / discount_raw가
         동일한 값으로 보일 수 있음. 이는 공통 스키마 유지에 따른 정상 동작이다.
 
+    - receipt_discount
+      - discount_raw: 영수증 전역 할인 금액
+      - price_raw: 원문 총액 보존용으로 동일 금액 저장 가능
+      - name_raw: 할인 라벨명
+
+    - fee
+      - price_raw: 별도 금액 항목
+      - name_raw: 항목명 (예: 공 병)
+
     - subtotal / total
       - price_raw: 집계 금액 후보
       - subtotal_count: subtotal 라인의 상품 개수 후보
 
     - item_name / discount_target
       - name_raw: 원문 기반 이름 후보
-
     """
     base = _empty_fields()
 
     raw = (line_text or "").strip()
     text = (normalized_line_text or "").strip()
+    store = (store or "").lower()
 
     if not text:
         return base
@@ -67,6 +76,21 @@ def extract_fields(
             is_discount=False,
         )
         base.update(parsed)
+
+        # emart 통합형 한 줄 item_detail이면 이름도 함께 복원
+        if (
+            store == "emart"
+            and not base.get("name_raw")
+            and not re.match(r"^\*?\d{13}\s", raw.strip())
+        ):
+            inline_name = _extract_inline_item_name_for_emart(raw)
+            if inline_name:
+                base["name_raw"] = cleanup_name_candidate(
+                    text=inline_name,
+                    store=store,
+                    store_rules=store_rules,
+        )
+
         return base
 
     if line_type == "discount_detail":
@@ -76,6 +100,25 @@ def extract_fields(
             is_discount=True,
         )
         base.update(parsed)
+
+        # emart 프로모션명 + 할인금액 구조에서는 이름을 같이 들고 가도 됨
+        if store == "emart" and not base.get("name_raw"):
+            discount_name = _extract_discount_name(raw)
+            if discount_name:
+                base["name_raw"] = cleanup_name_candidate(
+                    text=discount_name,
+                    store=store,
+                    store_rules=store_rules,
+                )
+
+        return base
+
+    if line_type == "receipt_discount":
+        base.update(_parse_receipt_discount_line(raw, text, store, store_rules))
+        return base
+
+    if line_type == "fee":
+        base.update(_parse_fee_line(raw, text, store, store_rules))
         return base
 
     if line_type == "subtotal":
@@ -189,6 +232,10 @@ def _parse_detail_line(
                 restored_fields.append("line_text_numeric_repaired")
                 restore_reason = "split numeric tokens merged before pattern match"
 
+            # code 앞 * 제거
+            if isinstance(code, str):
+                code = code.lstrip("*")
+
             # 1) qty 기본 보정
             if qty is None:
                 inferred_qty = _infer_qty_as_one_when_missing(
@@ -202,7 +249,7 @@ def _parse_detail_line(
                         restore_reason = "unit_price == price -> qty=1"
 
             # 2) 2-of-3 복원
-            if code:
+            if code or unit_price_raw is not None or price_raw is not None:
                 present_count = sum(
                     v is not None for v in [qty, unit_price_raw, price_raw]
                 )
@@ -280,6 +327,85 @@ def _parse_detail_line(
     return _empty_fields()
 
 
+def _parse_receipt_discount_line(
+    raw: str,
+    text: str,
+    store: str,
+    store_rules: Any,
+) -> Dict[str, Any]:
+    """
+    receipt-level discount 추출
+
+    예:
+    - 15%할인 : 2201606094 - 3,000
+    - 결제할인 : 2201606006 -4,410
+    - [앱]룰렛3천원 : 2201606243 -3,000
+    - 삼성카드할인 : 2211101938 -5,000
+    """
+    base = _empty_fields()
+
+    discount_amount = _extract_last_discount_amount(text)
+    if discount_amount is not None:
+        base["discount_raw"] = discount_amount
+        base["price_raw"] = discount_amount
+
+    # 코드 추출
+    m_code = re.search(r":\s*(\d+)\s*-\s*[\d,]+$", text)
+    if m_code:
+        base["code"] = m_code.group(1)
+
+    # 이름 추출
+    name = raw
+    if ":" in raw:
+        name = raw.split(":", 1)[0].strip()
+
+    cleaned_name = cleanup_name_candidate(
+        text=name,
+        store=store,
+        store_rules=store_rules,
+    )
+    base["name_raw"] = cleaned_name or name
+
+    return base
+
+
+def _parse_fee_line(
+    raw: str,
+    text: str,
+    store: str,
+    store_rules: Any,
+) -> Dict[str, Any]:
+    """
+    fee line 추출
+
+    예:
+    - 공 병 600
+    """
+    base = _empty_fields()
+
+    amount = _extract_last_amount(text)
+    if amount is not None:
+        base["price_raw"] = amount
+        base["unit_price_raw"] = amount
+        base["qty"] = 1
+
+    name = raw
+    m = re.match(r"^(.*?)([+-]?\d[\d,]*)$", raw.strip())
+    if m:
+        candidate_name = m.group(1).strip()
+        if candidate_name:
+            name = candidate_name
+
+    cleaned_name = cleanup_name_candidate(
+        text=name,
+        store=store,
+        store_rules=store_rules,
+    )
+    base["name_raw"] = cleaned_name or name
+
+    return base
+
+
 def _infer_qty_as_one_when_missing(
     unit_price_raw: Optional[int],
     price_raw: Optional[int],
@@ -335,22 +461,103 @@ def _extract_subtotal_count(text: str) -> Optional[int]:
 
 def _extract_last_amount(text: str) -> Optional[int]:
     """
-    subtotal / total 라인에서 마지막 금액 추출
+    subtotal / total / fee 라인에서 마지막 금액 추출
 
     예:
     - 상품수 소계 : 10
     - 합계 (VAT 포함) 232,330
     - (Sub-총상품수 : 13) 144420
+    - 공 병 600
 
-    반환값은 subtotal / total 계열에서 price_raw로 사용된다.
-    즉 여기서의 price_raw는 item/discount 라인의 price_raw와 달리
-    '집계 금액' 의미이다.
+    반환값은 subtotal / total / fee 계열에서 price_raw로 사용된다.
     """
     candidates = re.findall(r"[+-]?\d[\d,]*-?[Tt]?", text)
     if not candidates:
         return None
 
     return cast_amount_token(candidates[-1])
+
+
+def _extract_last_discount_amount(text: str) -> Optional[int]:
+    """
+    할인 계열 라인에서 마지막 음수 금액 추출
+
+    예:
+    - 컵밥류 2+1 -1,660
+    - 결제할인 : 2201606006 -4,410
+    - [앱]룰렛3천원 : 2201606243 -3,000
+    """
+    m = re.search(r"-\s*([\d,]+)\s*$", text)
+    if m:
+        return cast_discount_amount(m.group(1))
+
+    candidates = re.findall(r"[+-]?\d[\d,]*-?[Tt]?", text)
+    if not candidates:
+        return None
+
+    return cast_discount_amount(candidates[-1])
+
+
+def _extract_discount_name(raw: str) -> Optional[str]:
+    """
+    discount_detail에서 할인명 추출
+
+    예:
+    - 컵밥류 2+1 -1,660 -> 컵밥류 2+1
+    - 포인트카드 -15,000 -> 포인트카드
+    """
+    if not raw:
+        return None
+
+    m = re.match(r"^(.*?)\s*-\s*[\d,]+\s*$", raw.strip())
+    if m:
+        name = m.group(1).strip()
+        return name or None
+
+    return None
+
+
+def _extract_inline_item_name_for_emart(raw: str) -> Optional[str]:
+    """
+    emart 통합형 item_detail에서 이름 부분 복원
+
+    허용 예:
+    - "* 01 (Ph)돌바나나(송이) 2,280 1 2,280"
+    - "퍼실 딥클린 파워젤 26,980 3 80,940"
+
+    비허용 예:
+    - "8801121027097 1,450 1 1,450"
+    - "*8801013770025 280 4 1,120"
+    - "1500000018153 5,480 5,480"
+    """
+    if not raw:
+        return None
+
+    text = raw.strip()
+
+    # ---------------------------------------------------------
+    # 1) 바코드형 detail은 이름 복원 금지
+    # ---------------------------------------------------------
+    if re.match(r"^\*?\d{13}\s+[\d,]+(?:\s+\d+)?\s+[\d,]+\s*$", text):
+        return None
+
+    # ---------------------------------------------------------
+    # 2) 통합형: 뒤쪽 숫자 3토큰 제거
+    #    ex) 상품명 26,980 3 80,940
+    # ---------------------------------------------------------
+    m = re.match(r"^(.*?)\s+[\d,]+\s+\d+\s+[\d,]+\s*$", text)
+    if not m:
+        return None
+
+    name = m.group(1).strip()
+
+    # 선행 *, 번호 제거
+    name = re.sub(r"^\*\s*", "", name)
+    name = re.sub(r"^\d{2,3}\*?\s+", "", name)
+    name = re.sub(r"^\*\s*\d{2,3}\s+", "", name)
+
+    return name or None
+
 
 
 def _repair_split_item_detail_numbers(text: str) -> str:

@@ -39,18 +39,24 @@ from typing import Any, Optional
 ZERO_WIDTH_RE = re.compile(r"[\u200b\u200c\u200d\ufeff]")
 MULTI_SPACE_RE = re.compile(r"\s+")
 
+# 숫자 내부 분리
 COMMA_GROUP_RE = re.compile(r"(\d)\s*,\s*(\d)")
 DOT_GROUP_RE = re.compile(r"(\d)\s*\.\s*(\d)")
-TRAILING_MINUS_SPACE_RE = re.compile(r"(\d)\s*-\b")
+TRAILING_MINUS_SPACE_RE = re.compile(r"(\d)\s*-\s*$")
 BROKEN_QTY_RE = re.compile(r"(\d)\s+[xX]\b")
-QTY_TOKEN_RE = re.compile(r"(\d)\s*[xX]\b")
 
 # 4.000 / 12.900 / 2.500-T 같은 천 단위 점 표기
 THOUSAND_DOT_RE = re.compile(r"(?<!\d)([+-]?\d{1,3})\.(\d{3})(?!\d)")
 
-# line 전체 blind 적용은 금지지만, Costco detail 후보에서 안전하게 제거 가능한 케이스만 허용
+# Costco / Hanaro detail 후보에서 안전하게 제거 가능한 케이스
 LEADING_STAR_CODE_RE = re.compile(r"^\*\s*(\d{4,13}\b.*)$")
 ITEM_NUMBER_PREFIX_DETAIL_RE = re.compile(r"^\d{2,3}\*(\d{4,13}\b.*)$")
+
+# emart 통합형 이름 후보에서 제거할 prefix
+LEADING_ITEM_NO_RE = re.compile(r"^\d{2,3}\*?\s+")
+LEADING_BRACKET_PREFIX_RE = re.compile(r"^\([A-Za-z]{1,3}\)")
+LEADING_BRACKET_TAG_RE = re.compile(r"^\[[^\]]+\]\s*")
+
 
 # =========================================================
 # Known keyword normalization
@@ -59,14 +65,15 @@ ITEM_NUMBER_PREFIX_DETAIL_RE = re.compile(r"^\d{2,3}\*(\d{4,13}\b.*)$")
 KNOWN_SPACED_KEYWORDS = {
     "끝 전할 인": "끝전할인",
     "부 가 세": "부가세",
-    "면세 물품": "면세물품",
-    "과세 물품": "과세물품",
+    "합 계": "합계",
+    "면세 물품": "면세 물품",
+    "과세 물품": "과세 물품",
     "결 제대상금액": "결제대상금액",
-    "제대상금액": "결제대상금액",
+    "제대상금액": "제대상금액",
     "총 싱품수": "총상품수",
     "총 상품수": "총상품수",
-    "총 품목 수량": "총품목수량",
-    "합 계": "합계",
+    "총 품목 수량": "총 품목 수량",
+    "(*) 면세 물품": "(*)면세 물품",
 }
 
 # Costco 쪽에서 실제 필요했던 오타/변형
@@ -88,26 +95,21 @@ def normalize_line(line_text: str, store: str, store_rules: object | None = None
         return ""
 
     text = str(line_text)
-    print(f"[normalize_line][raw] {repr(text)}")
 
     text = _unicode_and_whitespace_cleanup(text)
-    print(f"[normalize_line][after _unicode_and_whitespace_cleanup] {repr(text)}")
-
     text = _split_number_join(text)
-    print(f"[normalize_line][after _split_number_join] {repr(text)}")
-
     text = _number_separator_normalization(text)
-    print(f"[normalize_line][after _number_separator_normalization] {repr(text)}")
-
     text = _keyword_spacing_normalization(text, store=store)
-    print(f"[normalize_line][after _keyword_spacing_normalization] {repr(text)}")
-
     text = _qty_token_normalization(text)
-    print(f"[normalize_line][after _qty_token_normalization] {repr(text)}")
+    text = _sign_spacing_normalization(text)
 
-    if _normalize_store(store) == "costco":
+    normalized_store = _normalize_store(store)
+
+    if normalized_store == "costco":
         text = _normalize_costco_line_safe(text)
-        print(f"[normalize_line][after _normalize_costco_line_safe] {repr(text)}")
+
+    if normalized_store == "hanaro":
+        text = _normalize_hanaro_line_safe(text)
 
     text = re.sub(r"\s+", " ", text)
 
@@ -119,20 +121,42 @@ def cleanup_name_candidate(text: str, store: str, store_rules: object | None = N
     name candidate 전용 정리
     - line 전체에 blind 적용하지 말고
     - name 후보에만 적용
+    - semantic에서 필요한 의미 토큰은 제거하지 않음
     """
     if text is None:
         return ""
 
     out = str(text).strip()
+    if not out:
+        return ""
 
-    # 번호 prefix 제거: 01 떡붕어싸만코 / 001 P삼겹살
-    out = re.sub(r"^(?P<prefix>\d{2,3}\*?)\s+(?P<rest>.+)$", r"\g<rest>", out)
+    store_norm = _normalize_store(store)
+
+    # 공통 공백 정리
+    out = _unicode_and_whitespace_cleanup(out)
+
+    # 선행 번호 prefix 제거: 01 떡붕어싸만코 / 001 P삼겹살
+    out = LEADING_ITEM_NO_RE.sub("", out).strip()
 
     # 선행 * 제거
     out = re.sub(r"^\*\s*", "", out)
 
-    # 대괄호 태그 제거는 Costco에선 공격적으로 하지 않음
-    # suffix(IRC/EXM/PP)는 semantic에서 쓸 수 있으므로 여기서 지우지 않음
+    # emart / hanaro 계열 대괄호 태그 제거
+    # ex) [앱]고소미50% / [카드쿠폰(율)]선진 삼겹
+    if store_norm in {"emart", "hanaro"}:
+        out = LEADING_BRACKET_TAG_RE.sub("", out).strip()
+
+    # emart 이름 앞 괄호 prefix 제거
+    # ex) (J)무항생제볶음탕용 / (Ph)돌바나나(송이)
+    if store_norm == "emart":
+        out = LEADING_BRACKET_PREFIX_RE.sub("", out).strip()
+
+    # store_rules의 name_cleanup_patterns 적용
+    if store_rules:
+        for pattern in store_rules.get("name_cleanup_patterns", []):
+            out = pattern.sub("", out).strip()
+
+    # Costco suffix(IRC/EXM/PP)는 semantic에서 쓰므로 제거하지 않음
     out = _unicode_and_whitespace_cleanup(out)
     return out
 
@@ -140,10 +164,14 @@ def cleanup_name_candidate(text: str, store: str, store_rules: object | None = N
 def cast_amount_token(token: Any) -> Optional[int]:
     """
     정규화된 숫자 문자열 -> int 후보
+
     예:
     9,590   -> 9590
+    -3,000  -> -3000
     1,800-  -> -1800
     2,600-T -> -2600
+    7,990 T -> 7990
+    4.000   -> 4000
     """
     if token is None:
         return None
@@ -155,19 +183,42 @@ def cast_amount_token(token: Any) -> Optional[int]:
     if not text:
         return None
 
+    text = _unicode_and_whitespace_cleanup(text)
     text = _split_number_join(text)
     text = _number_separator_normalization(text)
+    text = _sign_spacing_normalization(text)
 
-    text = text.replace(",", "")
+    # 중간 공백 제거
+    text = re.sub(r"\s+", "", text)
+
+    # trailing tax / discount marker 제거
     text = re.sub(r"[Tt]$", "", text)
 
+    # 1,800- / 2,500-T / 2,500T- -> negative
     if text.endswith("-"):
         text = "-" + text[:-1]
+    elif text.endswith("-T") or text.endswith("T-"):
+        text = "-" + text[:-2]
 
-    if text.lstrip("+-").isdigit():
+    # 남은 T 제거
+    text = text.replace("T", "").replace("t", "")
+
+    # 숫자/구분자/부호 외 제거
+    text = re.sub(r"[^0-9,.\-+]", "", text)
+
+    if not text or text in {"+", "-"}:
+        return None
+
+    # 점(.)과 콤마(,)는 둘 다 천 단위 구분자로 보고 제거
+    text = text.replace(",", "").replace(".", "")
+
+    if not text or text in {"+", "-"}:
+        return None
+
+    try:
         return int(text)
-
-    return None
+    except ValueError:
+        return None
 
 
 def cast_discount_amount(token: Any) -> Optional[int]:
@@ -178,6 +229,16 @@ def cast_discount_amount(token: Any) -> Optional[int]:
 
 
 def cast_qty_token(token: Any) -> Optional[int]:
+    """
+    수량 토큰 정규화
+
+    허용:
+    - 1
+    - 1x
+    - 1X
+    - 1 x
+    - 1 X
+    """
     if token is None:
         return None
 
@@ -188,9 +249,10 @@ def cast_qty_token(token: Any) -> Optional[int]:
     if not text:
         return None
 
+    text = _unicode_and_whitespace_cleanup(text)
     text = text.replace(",", "")
     text = text.replace("X", "x")
-    text = text.replace(" ", "")
+    text = re.sub(r"\s+", "", text)
 
     if text.endswith("x"):
         text = text[:-1]
@@ -260,6 +322,22 @@ def _qty_token_normalization(text: str) -> str:
     return text
 
 
+def _sign_spacing_normalization(text: str) -> str:
+    # - 3,000 -> -3,000
+    text = re.sub(r"(^|\s)-\s+(\d[\d,\.]*)", r"\1-\2", text)
+
+    # 2,500 -T / 2,500 - T -> 2,500-T
+    text = re.sub(r"(\d)\s*-\s*([Tt])\b", r"\1-\2", text)
+
+    # 2,500 T- / 2,500 T - -> 2,500T-
+    text = re.sub(r"(\d)\s*([Tt])\s*-\b", r"\1\2-", text)
+
+    # 7,990 T -> 7,990T
+    text = re.sub(r"(\d)\s+([Tt])\b", r"\1\2", text)
+
+    return text
+
+
 def _normalize_costco_line_safe(text: str) -> str:
     """
     Costco 전용 안전 정규화
@@ -272,6 +350,26 @@ def _normalize_costco_line_safe(text: str) -> str:
         text = m.group(1).strip()
 
     # 001*123456 1 2990 2,990T -> 123456 1 2990 2,990T
+    m = ITEM_NUMBER_PREFIX_DETAIL_RE.match(text)
+    if m:
+        text = m.group(1).strip()
+
+    return text
+
+
+def _normalize_hanaro_line_safe(text: str) -> str:
+    """
+    Hanaro 전용 안전 정규화
+    - *8801045352107 3,060 1 3,060
+    - 001*8801448212053 1,680 1 1,680
+    같은 detail 후보를 extractor가 읽기 쉽게 정리
+    """
+    # *8801045352107 ... -> 8801045352107 ...
+    m = LEADING_STAR_CODE_RE.match(text)
+    if m:
+        text = m.group(1).strip()
+
+    # 001*8801448212053 ... -> 8801448212053 ...
     m = ITEM_NUMBER_PREFIX_DETAIL_RE.match(text)
     if m:
         text = m.group(1).strip()
