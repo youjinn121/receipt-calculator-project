@@ -4,7 +4,7 @@ import ast
 from typing import Any, Dict, List, Optional
 
 from receipt_parser.normalizer import normalize_line
-from receipt_parser.line_classifier import classify_line
+from receipt_parser.line_classifier import classify_line, is_end_section_line
 from receipt_parser.field_extractor import extract_fields
 from receipt_parser.store_rules import get_store_rules
 
@@ -296,6 +296,7 @@ def resolve_store(
     )
 
 
+
 def parse_receipt(
     receipt: Dict[str, Any],
     store: Optional[str] = None,
@@ -306,8 +307,10 @@ def parse_receipt(
     resolved_store = resolve_store(receipt, store=store)
     lines = receipt.get("lines", [])
 
+    trimmed_lines = trim_lines_before_end_section(lines)
+
     structured_lines = parse_lines(
-        lines=lines,
+        lines=trimmed_lines,
         store=resolved_store,
     )
 
@@ -319,17 +322,74 @@ def parse_receipt(
     }
 
 
-def parse_receipts(
-    receipts: List[Dict[str, Any]],
-    store: Optional[str] = None,
-) -> List[Dict[str, Any]]:
-    """
-    여러 receipt 처리
-    """
-    results: List[Dict[str, Any]] = []
+def _find_last_prefixed_line_idx(lines: List[Any], prefix: str) -> Optional[int]:
+    last_idx: Optional[int] = None
 
-    for receipt in receipts:
-        parsed = parse_receipt(receipt, store=store)
-        results.append(parsed)
+    for idx, raw_line in enumerate(lines):
+        line_text = line_to_plain_text(raw_line).strip()
+        if line_text.startswith(prefix):
+            last_idx = idx
 
-    return results
+    return last_idx
+
+
+def _find_last_subtotal_line_idx(lines: List[Any]) -> Optional[int]:
+    last_idx: Optional[int] = None
+
+    subtotal_keywords = [
+        "Sub-총상품수",
+        "Sub-총상품",
+        "총상품수",
+        "상품수 소계",
+    ]
+
+    for idx, raw_line in enumerate(lines):
+        line_text = line_to_plain_text(raw_line).strip()
+
+        for kw in subtotal_keywords:
+            if kw in line_text:
+                last_idx = idx
+                break
+
+    return last_idx
+
+
+def trim_lines_before_end_section(lines: List[Any]) -> List[Any]:
+    """
+    종료 포인트 선택 우선순위
+
+    1. 합계 마지막 위치
+    2. 없으면 부가세 마지막 위치
+    3. 없으면 과세 마지막 위치
+    4. 없으면 면세 마지막 위치
+    5. 위 4개가 없으면 subtotal 마지막 위치
+    6. 그것도 없으면 원본 유지
+
+    선택된 종료 라인까지 body에 포함한다.
+    """
+    if not lines:
+        return lines
+
+    total_idx = _find_last_prefixed_line_idx(lines, "합계")
+    vat_idx = _find_last_prefixed_line_idx(lines, "부가세")
+    taxable_idx = _find_last_prefixed_line_idx(lines, "과세")
+    taxfree_idx = _find_last_prefixed_line_idx(lines, "면세")
+    subtotal_idx = _find_last_subtotal_line_idx(lines)
+
+    end_idx: Optional[int] = None
+
+    if total_idx is not None:
+        end_idx = total_idx
+    elif vat_idx is not None:
+        end_idx = vat_idx
+    elif taxable_idx is not None:
+        end_idx = taxable_idx
+    elif taxfree_idx is not None:
+        end_idx = taxfree_idx
+    elif subtotal_idx is not None:
+        end_idx = subtotal_idx
+
+    if end_idx is None:
+        return lines
+
+    return lines[: end_idx + 1]
