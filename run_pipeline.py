@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from receipt_parser.parser_pipeline import parse_receipt
-from semantic.interpreter import interpret_receipt
+from semantic import interpret_receipt
 from validation.validator import validate_receipt
 
 
@@ -103,6 +103,10 @@ def process_one_file(file_path: Path, store: Optional[str] = None) -> Dict[str, 
             f"파일 내부 store를 넣거나, costco/emart/hanaro 폴더 아래에 두세요."
         )
 
+    resolved_store = resolved_store.lower()
+    if resolved_store not in SUPPORTED_STORES:
+        raise ValueError(f"지원하지 않는 store입니다: {resolved_store}")
+
     # 🔥 파일명 결정
     output_file_name = resolve_output_file_name(receipt, file_path)
 
@@ -110,8 +114,11 @@ def process_one_file(file_path: Path, store: Optional[str] = None) -> Dict[str, 
     if "file_name" not in receipt or not receipt.get("file_name"):
         receipt["file_name"] = output_file_name
 
+    # store 값도 확정해서 downstream에 전달
+    receipt["store"] = resolved_store
+
     parsed = parse_receipt(receipt, store=resolved_store)
-    semantic = interpret_receipt(parsed)
+    semantic = interpret_receipt(parsed, store=resolved_store)
     validation = validate_receipt(semantic)
 
     ensure_output_dirs(resolved_store)
@@ -140,11 +147,15 @@ def run_pipeline(input_path: str, store: Optional[str] = None) -> List[Dict[str,
     path = Path(input_path)
     files = collect_input_files(path)
 
+    normalized_store = store.lower() if store else None
+    if normalized_store and normalized_store not in SUPPORTED_STORES:
+        raise ValueError(f"지원하지 않는 store입니다: {normalized_store}")
+
     results: List[Dict[str, Any]] = []
 
     for file_path in files:
         try:
-            result = process_one_file(file_path, store=store)
+            result = process_one_file(file_path, store=normalized_store)
             results.append(result)
 
             print(f"[OK] {file_path.name}")
@@ -157,7 +168,7 @@ def run_pipeline(input_path: str, store: Optional[str] = None) -> List[Dict[str,
         except Exception as e:
             results.append({
                 "input_file": str(file_path),
-                "store": store,
+                "store": normalized_store,
                 "is_valid": False,
                 "error": str(e),
             })
