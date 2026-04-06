@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from typing import Any, Dict, List, Optional
 
 from receipt_parser.normalizer import normalize_line
@@ -196,7 +197,6 @@ def build_structured_line(
         "is_restored": extracted.get("is_restored", False),
         "restore_reason": extracted.get("restore_reason"),
         "restored_fields": extracted.get("restored_fields", []),
-
     }
 
 
@@ -249,11 +249,14 @@ def parse_single_line(
 def parse_lines(
     lines: List[Any],
     store: str,
+    store_rules: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
     줄 리스트를 받아 structured lines 반환
     """
-    store_rules = get_store_rules(store)
+    if store_rules is None:
+        store_rules = get_store_rules(store)
+
     structured_lines: List[Dict[str, Any]] = []
 
     for idx, raw_line in enumerate(lines):
@@ -296,7 +299,6 @@ def resolve_store(
     )
 
 
-
 def parse_receipt(
     receipt: Dict[str, Any],
     store: Optional[str] = None,
@@ -305,13 +307,25 @@ def parse_receipt(
     receipt 단위 파싱
     """
     resolved_store = resolve_store(receipt, store=store)
+    store_rules = get_store_rules(resolved_store)
     lines = receipt.get("lines", [])
 
-    trimmed_lines = trim_lines_before_end_section(lines)
+    trimmed_start_lines = trim_lines_from_start_section(
+        lines=lines,
+        store=resolved_store,
+        store_rules=store_rules,
+    )
+
+    trimmed_lines = trim_lines_before_end_section(
+        lines=trimmed_start_lines,
+        store=resolved_store,
+        store_rules=store_rules,
+    )
 
     structured_lines = parse_lines(
         lines=trimmed_lines,
         store=resolved_store,
+        store_rules=store_rules,
     )
 
     return {
@@ -322,74 +336,254 @@ def parse_receipt(
     }
 
 
-def _find_last_prefixed_line_idx(lines: List[Any], prefix: str) -> Optional[int]:
-    last_idx: Optional[int] = None
-
-    for idx, raw_line in enumerate(lines):
-        line_text = line_to_plain_text(raw_line).strip()
-        if line_text.startswith(prefix):
-            last_idx = idx
-
-    return last_idx
-
-
-def _find_last_subtotal_line_idx(lines: List[Any]) -> Optional[int]:
-    last_idx: Optional[int] = None
-
-    subtotal_keywords = [
-        "Sub-총상품수",
-        "Sub-총상품",
-        "총상품수",
-        "상품수 소계",
-    ]
-
-    for idx, raw_line in enumerate(lines):
-        line_text = line_to_plain_text(raw_line).strip()
-
-        for kw in subtotal_keywords:
-            if kw in line_text:
-                last_idx = idx
-                break
-
-    return last_idx
-
-
-def trim_lines_before_end_section(lines: List[Any]) -> List[Any]:
+def trim_lines_before_end_section(
+    lines: List[Any],
+    store: str,
+    store_rules: Dict[str, Any],
+) -> List[Any]:
     """
-    종료 포인트 선택 우선순위
+    종료 포인트가 발견되면 그 줄까지 포함하고 이후 라인은 잘라낸다.
 
-    1. 합계 마지막 위치
-    2. 없으면 부가세 마지막 위치
-    3. 없으면 과세 마지막 위치
-    4. 없으면 면세 마지막 위치
-    5. 위 4개가 없으면 subtotal 마지막 위치
-    6. 그것도 없으면 원본 유지
+    emart 종료 우선순위:
+    1) 결제대상금액 / 제대상금액
+    2) 합계 뒤에 이어지는 receipt-level 할인 마지막 줄
+    3) 합계
+    4) subtotal fallback
+    5) 없으면 원본 유지
 
-    선택된 종료 라인까지 body에 포함한다.
+    그 외 store:
+    - 기존처럼 is_end_section_line() 기준 마지막 종료 라인
+    - 없으면 subtotal fallback
     """
     if not lines:
         return lines
 
-    total_idx = _find_last_prefixed_line_idx(lines, "합계")
-    vat_idx = _find_last_prefixed_line_idx(lines, "부가세")
-    taxable_idx = _find_last_prefixed_line_idx(lines, "과세")
-    taxfree_idx = _find_last_prefixed_line_idx(lines, "면세")
-    subtotal_idx = _find_last_subtotal_line_idx(lines)
+    normalized_lines: List[str] = []
+    for raw_line in lines:
+        plain = line_to_plain_text(raw_line)
+        normalized = normalize_line(
+            line_text=plain,
+            store=store,
+            store_rules=store_rules,
+        )
+        normalized_lines.append(normalized)
 
-    end_idx: Optional[int] = None
+    store = str(store or "").strip().lower()
 
-    if total_idx is not None:
-        end_idx = total_idx
-    elif vat_idx is not None:
-        end_idx = vat_idx
-    elif taxable_idx is not None:
-        end_idx = taxable_idx
-    elif taxfree_idx is not None:
-        end_idx = taxfree_idx
-    elif subtotal_idx is not None:
-        end_idx = subtotal_idx
+    if store == "emart":
+        end_idx = _find_emart_end_idx(
+            normalized_lines=normalized_lines,
+            store_rules=store_rules,
+        )
+    else:
+        end_idx: Optional[int] = None
+
+        # 1) total/tax 종료 포인트 우선
+        for idx, normalized in enumerate(normalized_lines):
+            if is_end_section_line(
+                text=normalized,
+                store=store,
+                store_rules=store_rules,
+            ):
+                end_idx = idx
+
+        # 2) subtotal 마지막 위치 fallback
+        if end_idx is None:
+            subtotal_keywords = store_rules.get("subtotal_keywords", [])
+            for idx, normalized in enumerate(normalized_lines):
+                if _contains_any_keyword(normalized, subtotal_keywords):
+                    end_idx = idx
 
     if end_idx is None:
         return lines
 
     return lines[: end_idx + 1]
+
+
+def _contains_any_keyword(text: str, keywords: List[str] | set[str]) -> bool:
+    normalized_text = " ".join(str(text or "").strip().split()).upper()
+
+    for kw in keywords:
+        normalized_kw = " ".join(str(kw or "").strip().split()).upper()
+        if not normalized_kw:
+            continue
+
+        if normalized_kw == normalized_text:
+            return True
+
+        if normalized_kw in normalized_text:
+            return True
+
+    return False
+
+
+def _find_emart_end_idx(
+    normalized_lines: List[str],
+    store_rules: Dict[str, Any],
+) -> Optional[int]:
+    """
+    emart 종료 포인트 선택
+
+    우선순위:
+    1) 결제대상금액 / 제대상금액 마지막 위치
+    2) 합계 뒤에 이어지는 receipt-level 할인 마지막 위치
+    3) 합계 마지막 위치
+    4) subtotal 마지막 위치
+    """
+    payment_total_idx: Optional[int] = None
+    receipt_discount_idx: Optional[int] = None
+    sum_idx: Optional[int] = None
+    subtotal_idx: Optional[int] = None
+
+    total_keywords = store_rules.get("total_keywords", [])
+    subtotal_keywords = store_rules.get("subtotal_keywords", [])
+
+    for idx, normalized in enumerate(normalized_lines):
+        if _starts_with_any_keyword(normalized, total_keywords):
+            payment_total_idx = idx
+
+        if _is_emart_receipt_discount_candidate(normalized):
+            receipt_discount_idx = idx
+
+        if normalized.startswith("합계"):
+            sum_idx = idx
+
+        if _contains_any_keyword(normalized, subtotal_keywords):
+            subtotal_idx = idx
+
+    # 1) 결제대상금액이 있으면 최우선
+    if payment_total_idx is not None:
+        return payment_total_idx
+
+    # 2) 합계 뒤에 receipt-level 할인 라인이 이어진 경우
+    if (
+        sum_idx is not None
+        and receipt_discount_idx is not None
+        and receipt_discount_idx > sum_idx
+    ):
+        return receipt_discount_idx
+
+    # 3) 일반 합계
+    if sum_idx is not None:
+        return sum_idx
+
+    # 4) subtotal fallback
+    if subtotal_idx is not None:
+        return subtotal_idx
+
+    return None
+
+
+def _is_emart_receipt_discount_candidate(text: str) -> bool:
+    """
+    emart 영수증 하단 전역 할인 후보
+
+    예:
+    - 결제할인 : 2201606006 -4,410
+    - 삼성카드할인 : 2211101938 -5,000
+    - [앱]룰렛3천원 : 2201606243 -3,000
+    - 15%할인 : 2201606094 - 3,000
+    """
+    normalized = " ".join(str(text or "").strip().split())
+
+    if re.match(r"^.+할인\s*:\s*\d+\s*-\s*[\d,]+$", normalized):
+        return True
+
+    if re.match(r"^\[앱\].+:\s*\d+\s*-\s*[\d,]+$", normalized):
+        return True
+
+    return False
+
+
+def _starts_with_any_keyword(text: str, keywords: List[str] | set[str]) -> bool:
+    normalized_text = " ".join(str(text or "").strip().split()).upper()
+
+    for kw in keywords:
+        normalized_kw = " ".join(str(kw or "").strip().split()).upper()
+        if not normalized_kw:
+            continue
+
+        if normalized_text.startswith(normalized_kw):
+            return True
+
+    return False
+
+
+def trim_lines_from_start_section(
+    lines: List[Any],
+    store: str,
+    store_rules: Dict[str, Any],
+) -> List[Any]:
+    """
+    시작 포인트 이전 라인을 잘라낸다.
+
+    emart만 적용
+    """
+    if not lines:
+        return lines
+
+    store = str(store or "").strip().lower()
+
+    if store != "emart":
+        return lines
+
+    start_idx = _find_emart_start_idx(
+        lines=lines,
+        store=store,
+        store_rules=store_rules,
+    )
+
+    if start_idx is None:
+        return lines
+
+    return lines[start_idx:]
+
+
+def _find_emart_start_idx(
+    lines: List[Any],
+    store: str,
+    store_rules: Dict[str, Any],
+) -> Optional[int]:
+    """
+    emart 시작 포인트 찾기
+
+    후보:
+    - 상품명 단 가 수량 금 액
+    - 단 가 수량 금 액
+    - 상품코드 단 가 수량 금 액
+    """
+    start_candidates = [
+        "상품명 단 가 수량 금 액",
+        "단 가 수량 금 액",
+        "상품코드 단 가 수량 금 액",
+    ]
+
+    normalized_candidates = [
+        _normalize_for_compare(c) for c in start_candidates
+    ]
+
+    for idx, raw_line in enumerate(lines):
+        plain = line_to_plain_text(raw_line)
+
+        normalized = normalize_line(
+            line_text=plain,
+            store=store,
+            store_rules=store_rules,
+        )
+
+        normalized_text = _normalize_for_compare(normalized)
+
+        for candidate in normalized_candidates:
+            if normalized_text == candidate:
+                return idx
+
+    return None
+
+
+def _normalize_for_compare(text: str) -> str:
+    """
+    비교용 정규화
+    - 공백 제거
+    - 대문자 통일
+    """
+    return "".join(str(text or "").strip().upper().split())

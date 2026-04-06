@@ -10,6 +10,8 @@
   - discount_keyword
   - discount_target
   - discount_detail
+  - receipt_discount
+  - fee
   - subtotal
   - total
   - noise
@@ -23,11 +25,12 @@
 분류 우선순위:
 1) noise
 2) subtotal / total
-3) discount_keyword
-4) discount_detail
-5) item_detail
-6) discount_target
-7) fallback → item_name
+3) receipt_discount / fee
+4) discount_keyword
+5) discount_detail
+6) item_detail
+7) discount_target
+8) fallback → item_name
 
 discount_target 규칙:
 - suffix: "상품명 IRC", "상품명EXM"
@@ -75,11 +78,10 @@ def classify_line(
 
     # =========================================================
     # 3) total
-    # 반드시 "합계"로 시작하는 경우만 total
-    # ex) "합계 375,880", "합계 (VAT 포함) 288,190"
-    # 비허용: "쿠폰합계 7 24,200"
+    # - store_rules.total_keywords 우선
+    # - 없으면 기본 합계 fallback
     # =========================================================
-    if _is_total_line(text):
+    if _is_total_line(text, store_rules):
         return "total"
 
     # =========================================================
@@ -89,13 +91,32 @@ def classify_line(
         return "noise"
 
     # =========================================================
-    # 5) discount keyword (CPN 등)
+    # 5) receipt_discount
+    # ex) 결제할인 : 2201606006 -4,410
+    # ex) 삼성카드할인 : 2211101938 -5,000
+    # ex) [앱]룰렛3천원 : 2201606243 -3,000
+    # =========================================================
+    if _is_receipt_discount_line(text, store_rules):
+        return "receipt_discount"
+
+    # =========================================================
+    # 6) fee
+    # ex) 공 병 600
+    # =========================================================
+    if _is_fee_line(text, store_rules):
+        return "fee"
+
+    # =========================================================
+    # 7) discount keyword
+    # ex) CPN / 자사 쿠폰 / [앱]
     # =========================================================
     if _is_discount_keyword_line(text, store_rules):
         return "discount_keyword"
 
     # =========================================================
-    # 6) discount detail (패턴 우선 + 강화된 휴리스틱)
+    # 8) discount detail
+    # - rules pattern 우선
+    # - fallback 휴리스틱
     # =========================================================
     if _matches_any_pattern(text, store_rules.get("discount_patterns", [])):
         return "discount_detail"
@@ -104,22 +125,25 @@ def classify_line(
         return "discount_detail"
 
     # =========================================================
-    # 7) item detail (휴리스틱 + 패턴)
+    # 9) item detail
+    # - rules pattern 우선
+    #   (emart 13자리 바코드 / inline item_detail 대응)
+    # - fallback 휴리스틱
     # =========================================================
-    if _is_item_detail_line(text):
-        return "item_detail"
-
     if _matches_any_pattern(text, store_rules.get("item_patterns", [])):
         return "item_detail"
 
+    if _is_item_detail_line(text):
+        return "item_detail"
+
     # =========================================================
-    # 8) discount target
+    # 10) discount target
     # =========================================================
     if _is_discount_target_line(text, store_rules):
         return "discount_target"
 
     # =========================================================
-    # 9) fallback
+    # 11) fallback
     # =========================================================
     return "item_name"
 
@@ -129,29 +153,44 @@ def classify_line(
 # parser 메인 루프에서 이 함수가 True면
 # 해당 줄까지 저장하고 break 하면 됨
 # 우선순위:
-# 1) 합계
-# 2) 부가세
-# 3) 과세
-# 4) 면세
+# 1) store_rules.total_keywords
+# 2) 합계
+# 3) 부가세
+# 4) 과세
+# 5) 면세
 # =========================================================
-def is_end_section_line(text: str) -> bool:
-    return _get_end_section_priority(text) is not None
+def is_end_section_line(
+    text: str,
+    store: str | None = None,
+    store_rules: Any | None = None,
+) -> bool:
+    return _get_end_section_priority(text, store=store, store_rules=store_rules) is not None
 
 
-def _get_end_section_priority(text: str) -> int | None:
+def _get_end_section_priority(
+    text: str,
+    store: str | None = None,
+    store_rules: Any | None = None,
+) -> int | None:
     normalized = _normalize_space(text)
 
-    if normalized.startswith("합계"):
-        return 1
+    if store_rules:
+        for kw in store_rules.get("total_keywords", []):
+            normalized_kw = _normalize_space(kw)
+            if normalized_kw and normalized.startswith(normalized_kw):
+                return 1
 
-    if normalized.startswith("부가세"):
+    if normalized.startswith("합계"):
         return 2
 
-    if normalized.startswith("과세"):
+    if normalized.startswith("부가세"):
         return 3
 
-    if normalized.startswith("면세"):
+    if normalized.startswith("과세"):
         return 4
+
+    if normalized.startswith("면세"):
+        return 5
 
     return None
 
@@ -164,6 +203,10 @@ def _is_noise_line(raw: str, text: str, store_rules: Any) -> bool:
     if _contains_any_keyword(text, store_rules.get("noise_keywords", [])):
         return True
 
+    if _matches_any_pattern(text, store_rules.get("noise_patterns", [])):
+        return True
+
+    # Costco OCR 내부 노이즈
     if re.match(r"^\*[A-Z]+", text):
         return True
 
@@ -173,40 +216,68 @@ def _is_noise_line(raw: str, text: str, store_rules: Any) -> bool:
     return False
 
 
-def _is_total_line(text: str) -> bool:
+def _is_total_line(text: str, store_rules: Any) -> bool:
     """
-    total은 반드시 '합계'로 시작하는 경우만 허용한다.
+    total 판정
 
-    허용:
-    - 합계 375,880
-    - 합계 (VAT 포함) 288,190
+    우선:
+    - store_rules.total_keywords 시작 여부
 
-    비허용:
-    - 쿠폰합계 7 24,200
+    fallback:
+    - '합계' 시작 여부
     """
     normalized = _normalize_space(text)
+
+    for kw in store_rules.get("total_keywords", []):
+        normalized_kw = _normalize_space(kw)
+        if normalized_kw and normalized.startswith(normalized_kw):
+            return True
+
     return normalized.startswith("합계")
 
 
-# =========================================================
-#  핵심 추가 1: item_detail 휴리스틱
-# =========================================================
+def _is_receipt_discount_line(text: str, store_rules: Any) -> bool:
+    normalized = _normalize_space(text)
+
+    if _matches_any_pattern(normalized, store_rules.get("receipt_discount_patterns", [])):
+        return True
+
+    # fallback
+    if re.match(r"^.+할인\s*:\s*\d+\s*-\s*[\d,]+$", normalized):
+        return True
+
+    return False
+
+
+def _is_fee_line(text: str, store_rules: Any) -> bool:
+    normalized = _normalize_space(text)
+
+    if _matches_any_pattern(normalized, store_rules.get("fee_patterns", [])):
+        return True
+
+    # fallback
+    if re.match(r"^(공\s*병|공병)\s+[\d,]+$", normalized):
+        return True
+
+    return False
+
+
 def _is_item_detail_line(text: str) -> bool:
     """
+    fallback 휴리스틱 (Costco 중심)
+
     조건:
-    - 숫자 6~7자리 코드
-    - 가격 2개 이상
+    - 첫 토큰이 4~7자리 숫자 코드
+    - 가격 토큰이 2개 이상
     """
     tokens = text.split()
 
     if len(tokens) < 3:
         return False
 
-    # 코드 (6~7자리 숫자)
     if not re.match(r"^\d{4,7}$", tokens[0]):
         return False
 
-    # 가격 개수
     price_tokens = [t for t in tokens if re.match(r"^[\d,]+$", t)]
     if len(price_tokens) >= 2:
         return True
@@ -214,12 +285,9 @@ def _is_item_detail_line(text: str) -> bool:
     return False
 
 
-# =========================================================
-#  핵심 추가 2: discount_detail 휴리스틱
-# =========================================================
 def _is_discount_detail_line(text: str) -> bool:
     """
-    discount_detail 휴리스틱 (강화 버전)
+    discount_detail fallback 휴리스틱
 
     허용 조건:
     1) 숫자-, 숫자-T, T- 같은 끝쪽 할인 표식
@@ -236,13 +304,13 @@ def _is_discount_detail_line(text: str) -> bool:
     compact = _normalize_space(text)
 
     # ---------------------------------------------------------
-    # 1) 끝쪽 할인 표식: 숫자-, 숫자-T, 숫자 T-
+    # 1) 끝쪽 할인 표식
     # ---------------------------------------------------------
     if re.search(r"[\d,]+(?:-|-T|T-)\s*$", compact):
         return True
 
     # ---------------------------------------------------------
-    # 2) 구조 후보 계산: 코드 / 수량 / 금액
+    # 2) 구조 후보 계산
     # ---------------------------------------------------------
     code_candidate = False
     qty_candidate = False
@@ -269,12 +337,11 @@ def _is_discount_detail_line(text: str) -> bool:
         structure_score += 1
 
     # ---------------------------------------------------------
-    # 3) 할인 표식이 있고 구조도 어느 정도 갖춘 경우만 허용
-    #    단순 -숫자 는 여기서 바로 discount_detail로 보지 않음
+    # 3) 할인 표식 + 구조
     # ---------------------------------------------------------
     has_discount_marker = (
         "-" in compact
-        and not re.search(r"-\s*\d", compact)  # 선행 마이너스 금액은 제외
+        and not re.search(r"-\s*\d", compact)
     )
 
     if has_discount_marker and structure_score >= 2:
@@ -288,10 +355,13 @@ def _is_discount_keyword_line(text: str, store_rules: Any) -> bool:
 
     for kw in store_rules.get("discount_keywords", []):
         normalized_kw = _normalize_space(kw).upper()
+        if not normalized_kw:
+            continue
+
         if normalized == normalized_kw:
             return True
 
-        if normalized_kw and normalized_kw in normalized:
+        if normalized_kw in normalized:
             return True
 
     return False
