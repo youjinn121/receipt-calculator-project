@@ -41,7 +41,7 @@ MULTI_SPACE_RE = re.compile(r"\s+")
 
 # 숫자 내부 분리
 COMMA_GROUP_RE = re.compile(r"(\d)\s*,\s*(\d)")
-DOT_GROUP_RE = re.compile(r"(\d)\s*\.\s*(\d)")
+DOT_GROUP_RE = re.compile(r"(\d{1,3})\s*\.\s*(\d{3})(?!\d)")
 TRAILING_MINUS_SPACE_RE = re.compile(r"(\d)\s*-\s*$")
 BROKEN_QTY_RE = re.compile(r"(\d)\s+[xX]\b")
 
