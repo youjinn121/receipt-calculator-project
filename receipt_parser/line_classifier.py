@@ -261,6 +261,16 @@ def _is_receipt_discount_line(text: str, store_rules: Any) -> bool:
 def _is_fee_line(text: str, store_rules: Any) -> bool:
     normalized = _normalize_space(text)
 
+    # ---------------------------------------------------------
+    # emart 예외:
+    # 공병/공 병 라인은 fee로 유지하지 않고 noise로 처리한다.
+    # rules에서 noise_keywords로 내리고,
+    # 여기서는 fee fallback까지 막아준다.
+    # ---------------------------------------------------------
+    if str(store_rules.get("store", "")).lower() == "emart":
+        if re.match(r"^(공\s*병|공병)\s+[\d,]+$", normalized):
+            return False
+
     if _matches_any_pattern(normalized, store_rules.get("fee_patterns", [])):
         return True
 
