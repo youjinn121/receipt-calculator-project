@@ -143,6 +143,15 @@ def classify_line(
         return "discount_target"
 
     # =========================================================
+    # 10-1) item_detail restore before fallback item_name
+    # - item_name 후보였지만 줄 끝 숫자 패턴이 item_detail 형태면 승격
+    # - ex) 설탕대신 스테비아 1. 11,980 1 11,980
+    # - ex) *8809205164010 4,820 4,820  -> qty=1 복구 후보
+    # =========================================================
+    if store == "emart" and _looks_like_item_detail_from_tail_numbers(text):
+        return "item_detail"
+
+    # =========================================================
     # 11) fallback
     # =========================================================
     return "item_name"
@@ -434,3 +443,97 @@ def _contains_any_keyword(text: str, keywords: Iterable[str]) -> bool:
 
 def _normalize_space(text: str) -> str:
     return " ".join(str(text or "").strip().split())
+
+
+def _looks_like_item_detail_from_tail_numbers(text: str) -> bool:
+    """
+    item_name fallback 직전 복구용 item_detail 판정
+
+    허용 케이스:
+    1) 줄 끝에 [unit_price, qty, total_price] 3개 숫자 토큰이 있고
+       unit_price * qty == total_price
+    2) 줄 끝에 [unit_price, total_price] 2개 숫자 토큰이 있고
+       unit_price == total_price
+       -> qty=1 복구 후보
+
+    주의:
+    - classifier는 line_type만 결정
+    - 실제 qty/name/price 복구는 field_extractor 쪽에서 수행
+    """
+    tokens = _normalize_space(text).split()
+    if len(tokens) < 2:
+        return False
+
+    numeric_indices = [
+        idx for idx, token in enumerate(tokens)
+        if _is_amount_like_token(token)
+    ]
+
+    if len(numeric_indices) < 2:
+        return False
+
+    # ---------------------------------------------------------
+    # case 1) 마지막 3개 숫자 토큰 사용
+    # ex) 상품명 11,980 1 11,980
+    # ---------------------------------------------------------
+    if len(numeric_indices) >= 3:
+        last3 = numeric_indices[-3:]
+
+        # 마지막 3개 숫자 토큰이 실제로 연속된 tail인지 확인
+        if last3 == list(range(last3[0], last3[0] + 3)):
+            unit_price = _parse_amount_token(tokens[last3[0]])
+            qty = _parse_qty_token(tokens[last3[1]])
+            total_price = _parse_amount_token(tokens[last3[2]])
+
+            if (
+                unit_price is not None
+                and qty is not None
+                and total_price is not None
+                and qty >= 1
+                and total_price >= unit_price
+                and unit_price * qty == total_price
+            ):
+                return True
+
+    # ---------------------------------------------------------
+    # case 2) 마지막 2개 숫자 토큰 사용
+    # ex) 상품명 4,820 4,820
+    # -> qty=1 복구 후보
+    # ---------------------------------------------------------
+    last2 = numeric_indices[-2:]
+    if last2 == list(range(last2[0], last2[0] + 2)):
+        unit_price = _parse_amount_token(tokens[last2[0]])
+        total_price = _parse_amount_token(tokens[last2[1]])
+
+        if (
+            unit_price is not None
+            and total_price is not None
+            and unit_price == total_price
+        ):
+            return True
+
+    return False
+
+
+def _is_amount_like_token(token: str) -> bool:
+    return bool(re.fullmatch(r"[\d,]+", token.strip()))
+
+
+def _parse_amount_token(token: str) -> int | None:
+    stripped = token.strip().replace(",", "")
+    if not stripped.isdigit():
+        return None
+    try:
+        return int(stripped)
+    except Exception:
+        return None
+
+
+def _parse_qty_token(token: str) -> int | None:
+    stripped = token.strip().upper().replace("X", "")
+    if not stripped.isdigit():
+        return None
+    try:
+        return int(stripped)
+    except Exception:
+        return None
