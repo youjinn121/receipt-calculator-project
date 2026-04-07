@@ -107,7 +107,7 @@ def process_one_file(file_path: Path, store: Optional[str] = None) -> Dict[str, 
     if resolved_store not in SUPPORTED_STORES:
         raise ValueError(f"지원하지 않는 store입니다: {resolved_store}")
 
-    # 🔥 파일명 결정
+    # 파일명 결정
     output_file_name = resolve_output_file_name(receipt, file_path)
 
     # file_name 없으면 채워줌 (semantic/validation에서 사용됨)
@@ -181,3 +181,5 @@ def run_pipeline(input_path: str, store: Optional[str] = None) -> List[Dict[str,
 
 if __name__ == "__main__":
     run_pipeline(str(RAW_ROOT / "costco"), store="costco")
+    run_pipeline(str(RAW_ROOT / "emart"), store="emart")
+    run_pipeline(str(RAW_ROOT / "hanaro"), store="hanaro")

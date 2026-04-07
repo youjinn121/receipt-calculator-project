@@ -11,6 +11,7 @@ def interpret_receipt(parsed_receipt: Dict[str, Any]) -> Dict[str, Any]:
     - item_name + item_detail 결합
     - discount_detail을 직전 item에 귀속
     - receipt_discount / fee / total / subtotal은 tail_info에 분리 저장
+    - 내부 검증용으로 item_total / payment_total / receipt_discount_total / fee_total 계산
 
     반환 구조:
     {
@@ -23,6 +24,14 @@ def interpret_receipt(parsed_receipt: Dict[str, Any]) -> Dict[str, Any]:
             "subtotals": [...],
             "receipt_discounts": [...],
             "fees": [...],
+            "item_total_candidates": [...],
+            "payment_total_candidates": [...],
+            "summary": {
+                "item_total": ...,
+                "payment_total": ...,
+                "receipt_discount_total": ...,
+                "fee_total": ...,
+            },
         },
         "lines": parsed lines,
     }
@@ -30,11 +39,19 @@ def interpret_receipt(parsed_receipt: Dict[str, Any]) -> Dict[str, Any]:
     lines: List[Dict[str, Any]] = parsed_receipt.get("lines", [])
 
     items: List[Dict[str, Any]] = []
-    tail_info: Dict[str, List[Dict[str, Any]]] = {
+    tail_info: Dict[str, Any] = {
         "totals": [],
         "subtotals": [],
         "receipt_discounts": [],
         "fees": [],
+        "item_total_candidates": [],
+        "payment_total_candidates": [],
+        "summary": {
+            "item_total": None,
+            "payment_total": None,
+            "receipt_discount_total": 0,
+            "fee_total": 0,
+        },
     }
 
     pending_name: Optional[str] = None
@@ -133,16 +150,30 @@ def interpret_receipt(parsed_receipt: Dict[str, Any]) -> Dict[str, Any]:
 
         # ---------------------------------------------------------
         # 6) total
+        # - raw totals는 그대로 보존
+        # - 내부 검증용으로 item_total / payment_total 후보도 분리
         # ---------------------------------------------------------
         if line_type == "total":
-            tail_info["totals"].append(
-                {
-                    "line_idx": line_idx,
-                    "price": _safe_int(row.get("price_raw")),
-                    "label": _clean_text(row.get("line_text")),
-                    "source_line_indices": [line_idx] if line_idx is not None else [],
-                }
-            )
+            total_row = {
+                "line_idx": line_idx,
+                "price": _safe_int(row.get("price_raw")),
+                "label": _clean_text(row.get("line_text")),
+                "source_line_indices": [line_idx] if line_idx is not None else [],
+            }
+
+            tail_info["totals"].append(total_row)
+
+            total_kind = _classify_emart_total_kind(total_row.get("label"))
+            total_candidate = {
+                **total_row,
+                "total_kind": total_kind,
+            }
+
+            if total_kind == "payment_total":
+                tail_info["payment_total_candidates"].append(total_candidate)
+            else:
+                tail_info["item_total_candidates"].append(total_candidate)
+
             continue
 
         # ---------------------------------------------------------
@@ -165,6 +196,8 @@ def interpret_receipt(parsed_receipt: Dict[str, Any]) -> Dict[str, Any]:
         # emart 현재 구조에서는 대부분 무시
         # ---------------------------------------------------------
         continue
+
+    tail_info["summary"] = _build_tail_summary(items, tail_info)
 
     return {
         "file_name": parsed_receipt.get("file_name", ""),
@@ -272,6 +305,75 @@ def _attach_discount_to_item(
         }
     )
     item["discount_meta"] = discount_meta
+
+
+def _classify_emart_total_kind(label: Any) -> str:
+    """
+    emart total 라인을 내부 검증용으로 분류
+    - 결제대상금액 / 제대상금액 계열 -> payment_total
+    - 그 외 합계 계열 -> item_total
+    """
+    text = _normalize_text(label)
+
+    if "결제대상금액" in text or "제대상금액" in text:
+        return "payment_total"
+
+    return "item_total"
+
+
+def _build_tail_summary(items: List[Dict[str, Any]], tail_info: Dict[str, Any]) -> Dict[str, Optional[int]]:
+    item_total = _extract_last_price(tail_info.get("item_total_candidates", []))
+    payment_total = _extract_last_price(tail_info.get("payment_total_candidates", []))
+    receipt_discount_total = _sum_receipt_discounts(tail_info.get("receipt_discounts", []))
+    fee_total = _sum_fees(tail_info.get("fees", []))
+
+    return {
+        "item_total": item_total,
+        "payment_total": payment_total,
+        "receipt_discount_total": receipt_discount_total,
+        "fee_total": fee_total,
+    }
+
+
+def _extract_last_price(rows: List[Dict[str, Any]]) -> Optional[int]:
+    for row in reversed(rows):
+        price = _safe_int(row.get("price"))
+        if price is not None:
+            return price
+    return None
+
+
+def _sum_receipt_discounts(rows: List[Dict[str, Any]]) -> int:
+    total = 0
+
+    for row in rows:
+        discount = _safe_int(row.get("discount"))
+        if discount is not None:
+            total += abs(discount)
+            continue
+
+        price_raw = _safe_int(row.get("price_raw"))
+        if price_raw is not None:
+            total += abs(price_raw)
+
+    return total
+
+
+def _sum_fees(rows: List[Dict[str, Any]]) -> int:
+    total = 0
+
+    for row in rows:
+        price = _safe_int(row.get("price"))
+        if price is not None:
+            total += abs(price)
+
+    return total
+
+
+def _normalize_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return "".join(str(value).strip().split())
 
 
 def _safe_int(value: Any) -> Optional[int]:
