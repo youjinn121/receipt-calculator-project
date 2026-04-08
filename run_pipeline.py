@@ -9,6 +9,7 @@ from semantic import interpret_receipt
 from validation.validator import validate_receipt
 
 
+
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 RAW_ROOT = PROJECT_ROOT / "data" / "raw"
