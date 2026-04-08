@@ -395,26 +395,6 @@ def _parse_detail_line(
                 "restored_fields": [],
             }
 
-            # price mismatch correction (OCR 깨짐 대응)
-            if (
-                not is_discount
-                and result.get("qty")
-                and result.get("unit_price_raw")
-                and result.get("price_raw")
-            ):
-                expected = result["qty"] * result["unit_price_raw"]
-
-                if result["price_raw"] != expected:
-                    result["price_raw"] = expected
-
-                    if "price_raw" not in restored_fields:
-                        restored_fields.append("price_raw")
-
-                    result["is_restored"] = True
-                    if result["restore_reason"] is None:
-                        result["restore_reason"] = "price_raw corrected from unit_price * qty"
-                    result["restored_fields"] = restored_fields
-
             if is_discount:
                 result["discount_raw"] = cast_discount_amount(gd.get("price"))
                 if result["discount_raw"] is None and result["price_raw"] is not None:

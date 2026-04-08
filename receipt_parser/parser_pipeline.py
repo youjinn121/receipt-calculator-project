@@ -1,4 +1,5 @@
 from __future__ import annotations
+print("PARSER_PIPELINE PATH:", __file__)
 
 import ast
 import re
@@ -8,6 +9,7 @@ from receipt_parser.normalizer import normalize_line
 from receipt_parser.line_classifier import classify_line, is_end_section_line
 from receipt_parser.field_extractor import extract_fields
 from receipt_parser.store_rules import get_store_rules
+from receipt_parser.field_recovery import recover_fields
 
 
 def infer_store_from_filename(file_name: str) -> Optional[str]:
@@ -234,6 +236,15 @@ def parse_single_line(
         line_text=line_text,
         normalized_line_text=normalized_line_text,
         line_type=line_type,
+        store=store,
+        store_rules=store_rules,
+    )
+
+    extracted = recover_fields(
+        line_text=line_text,
+        normalized_line_text=normalized_line_text,
+        line_type=line_type,
+        extracted=extracted,
         store=store,
         store_rules=store_rules,
     )
