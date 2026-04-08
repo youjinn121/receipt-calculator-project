@@ -120,6 +120,25 @@ def extract_fields(
             patterns=store_rules.get("discount_patterns", []),
             is_discount=True,
         )
+
+        # ---------------------------------------------------------
+        # pattern 매칭 실패 시:
+        # 단독 음수 할인 라인 fallback 추출
+        # 예)
+        # - -6,500
+        # - -2,950
+        # - -10,600
+        #
+        # 목적:
+        # - classifier에서 discount_detail로 분류된 단독 음수 금액 라인이
+        #   semantic에서 discount_amount=0으로 붙지 않도록
+        #   discount_raw / price_raw를 직접 채운다.
+        # ---------------------------------------------------------
+        if _is_empty_discount_result(parsed):
+            fallback = _parse_standalone_negative_discount_line(raw, text)
+            if fallback is not None:
+                parsed = fallback
+
         base.update(parsed)
 
         # emart 프로모션명 + 할인금액 구조에서는 이름을 같이 들고 가도 됨
@@ -185,6 +204,65 @@ def extract_fields(
 # =========================================================
 # Internal helpers
 # =========================================================
+
+def _is_empty_discount_result(parsed: Dict[str, Any]) -> bool:
+    """
+    discount_detail 파싱 실패 여부 판단
+
+    단독 음수 할인 라인(-6,500)은 기존 discount_patterns에 안 걸릴 수 있으므로
+    fallback 추출 여부를 결정하기 위한 helper.
+    """
+    return (
+        parsed.get("discount_raw") is None
+        and parsed.get("price_raw") is None
+        and parsed.get("unit_price_raw") is None
+        and parsed.get("name_raw") is None
+    )
+
+
+def _parse_standalone_negative_discount_line(
+    raw: str,
+    text: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    단독 음수 할인 라인 fallback 추출
+
+    예:
+    - -6,500
+    - -2,950
+    - -10,600
+
+    처리 원칙:
+    - 이름(name_raw)은 없을 수 있다.
+    - semantic 단계에서는 discount_raw를 우선 사용하므로
+      discount_raw / price_raw를 동일하게 채워준다.
+    - unit_price_raw / qty 는 넣지 않는다.
+    """
+    normalized = (text or "").strip()
+
+    if not normalized:
+        return None
+
+    if not re.fullmatch(r"-\d[\d,]*", normalized):
+        return None
+
+    discount_amount = _extract_last_discount_amount(normalized)
+    if discount_amount is None:
+        return None
+
+    return {
+        "code": None,
+        "qty": None,
+        "unit_price_raw": None,
+        "price_raw": discount_amount,
+        "discount_raw": discount_amount,
+        "name_raw": None,
+        "subtotal_count": None,
+        "receipt_qty": None,
+        "is_restored": True,
+        "restore_reason": "standalone negative amount parsed as discount_detail",
+        "restored_fields": ["discount_raw", "price_raw"],
+    }
 
 def _empty_fields() -> Dict[str, Any]:
     return {

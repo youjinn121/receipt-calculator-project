@@ -37,6 +37,7 @@ def interpret_receipt(parsed_receipt: Dict[str, Any]) -> Dict[str, Any]:
     }
     """
     lines: List[Dict[str, Any]] = parsed_receipt.get("lines", [])
+    tail_start_idx = _find_tail_start_index(lines)
 
     items: List[Dict[str, Any]] = []
     tail_info: Dict[str, Any] = {
@@ -91,40 +92,118 @@ def interpret_receipt(parsed_receipt: Dict[str, Any]) -> Dict[str, Any]:
             pending_name_line_idx = None
             continue
 
-        # ---------------------------------------------------------
+                # ---------------------------------------------------------
         # 3) discount_detail
         # emart는 직전 완료 item 귀속이 기본
+        # - body 구간: item 할인 우선
+        # - tail 구간: receipt_discount로 승격 가능
         # ---------------------------------------------------------
         if line_type == "discount_detail":
-            if last_completed_item_idx is not None:
-                _attach_discount_to_item(
-                    item=items[last_completed_item_idx],
-                    row=row,
-                    attach_mode="previous_item_fallback",
-                )
-            else:
-                # 귀속할 item이 없으면 tail 쪽에 보조로 남김
+            text = _clean_text(row.get("line_text")) or ""
+            discount_amount = _safe_int(row.get("discount_raw")) or _safe_int(row.get("price_raw"))
+
+            in_tail = (
+                tail_start_idx is not None
+                and line_idx is not None
+                and line_idx >= tail_start_idx
+            )
+
+            # -----------------------------------------------------
+            # tail 구간 할인 -> receipt_discount
+            # -----------------------------------------------------
+            if in_tail and discount_amount is not None and discount_amount > 0:
                 tail_info["receipt_discounts"].append(
                     {
                         "line_idx": line_idx,
-                        "name": _clean_text(row.get("name_raw")),
-                        "discount": _safe_int(row.get("discount_raw")),
+                        "name": _clean_text(row.get("name_raw")) or text,
+                        "code": _clean_text(row.get("code")),
+                        "discount": discount_amount,
+                        "price_raw": _safe_int(row.get("price_raw")),
                         "source_line_indices": [line_idx] if line_idx is not None else [],
-                        "kind": "orphan_discount_detail",
+                        "kind": "receipt_discount_promoted_from_tail",
                     }
                 )
+                continue
+
+            # -----------------------------------------------------
+            # body 구간 할인 -> item 우선
+            # 단독 음수 / 에누리 / 행사 / S-POINT 등
+            # -----------------------------------------------------
+            if not in_tail:
+                if last_completed_item_idx is not None:
+                    _attach_discount_to_item(
+                        item=items[last_completed_item_idx],
+                        row=row,
+                        attach_mode="previous_item_fallback",
+                    )
+                else:
+                    tail_info["receipt_discounts"].append(
+                        {
+                            "line_idx": line_idx,
+                            "name": _clean_text(row.get("name_raw")) or text,
+                            "discount": discount_amount,
+                            "price_raw": _safe_int(row.get("price_raw")),
+                            "source_line_indices": [line_idx] if line_idx is not None else [],
+                            "kind": "orphan_discount_detail_in_body",
+                        }
+                    )
+                continue
+
+            # -----------------------------------------------------
+            # 안전 fallback
+            # -----------------------------------------------------
+            tail_info["receipt_discounts"].append(
+                {
+                    "line_idx": line_idx,
+                    "name": _clean_text(row.get("name_raw")) or text,
+                    "discount": discount_amount,
+                    "price_raw": _safe_int(row.get("price_raw")),
+                    "source_line_indices": [line_idx] if line_idx is not None else [],
+                    "kind": "receipt_discount_fallback",
+                }
+            )
             continue
 
         # ---------------------------------------------------------
         # 4) receipt_discount
+        # - body 구간이면 직전 item 할인으로 우선 귀속
+        # - tail 구간이면 영수증 전역 할인으로 유지
         # ---------------------------------------------------------
         if line_type == "receipt_discount":
+            text = _clean_text(row.get("line_text")) or ""
+            discount_amount = _safe_int(row.get("discount_raw")) or _safe_int(row.get("price_raw"))
+
+            in_tail = (
+                tail_start_idx is not None
+                and line_idx is not None
+                and line_idx >= tail_start_idx
+            )
+
+            # -----------------------------------------------------
+            # body 구간의 receipt_discount 후보는 item 할인으로 우선 귀속
+            # 예:
+            # - 카드할인 -4,000  (합계 전)
+            # -----------------------------------------------------
+            if not in_tail and last_completed_item_idx is not None:
+                _attach_discount_to_item(
+                    item=items[last_completed_item_idx],
+                    row=row,
+                    attach_mode="receipt_discount_reassigned_to_item",
+                )
+                continue
+
+            # -----------------------------------------------------
+            # tail 구간이면 영수증 전역 할인 유지
+            # 예:
+            # - 삼성카드할인 : 2211101938 -5,000
+            # - 결제할인 : -5,000
+            # -----------------------------------------------------
             tail_info["receipt_discounts"].append(
                 {
                     "line_idx": line_idx,
-                    "name": _clean_text(row.get("name_raw")),
+                    "name": _clean_text(row.get("name_raw")) or text,
                     "code": _clean_text(row.get("code")),
-                    "discount": _safe_int(row.get("discount_raw")),
+                    "discount": discount_amount,
                     "price_raw": _safe_int(row.get("price_raw")),
                     "source_line_indices": [line_idx] if line_idx is not None else [],
                     "kind": "receipt_discount",
@@ -212,6 +291,28 @@ def interpret_receipt(parsed_receipt: Dict[str, Any]) -> Dict[str, Any]:
 # =========================================================
 # Internal helpers
 # =========================================================
+def _find_tail_start_index(lines: List[Dict[str, Any]]) -> Optional[int]:
+    """
+    emart tail 시작점 탐색
+
+    우선순위:
+    1) receipt_qty
+    2) total
+    3) tax/noise 중 tail 성격 키워드
+    """
+    for row in lines:
+        line_idx = row.get("line_idx")
+        line_type = row.get("line_type")
+        text = _normalize_text(row.get("line_text"))
+
+        if line_type in {"receipt_qty", "total"}:
+            return line_idx
+
+        if any(kw in text for kw in ["면세물품", "과세물품", "부가세", "합계", "결제대상금액"]):
+            return line_idx
+
+    return None
+
 
 def _build_item_from_detail_row(
     row: Dict[str, Any],

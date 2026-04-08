@@ -60,110 +60,81 @@ def classify_line(
 ) -> str:
     raw = _normalize_space(line_text)
     text = _normalize_space(normalized_line_text)
+    store = (store or "").lower()
 
     if not text:
         return "noise"
 
-    # =========================================================
     # 0) receipt qty
-    # ex) 총 품목 수량 15
-    # note:
-    # - noise보다 먼저 잡아야 한다.
-    # - emart_rules.py에서 receipt_qty_keywords로 관리
-    # =========================================================
     if _is_receipt_qty_line(text, store_rules):
         return "receipt_qty"
 
-    # =========================================================
     # 1) noise
-    # =========================================================
     if _is_noise_line(raw, text, store_rules):
         return "noise"
 
-    # =========================================================
     # 2) subtotal
-    # =========================================================
     if _contains_any_keyword(text, store_rules.get("subtotal_keywords", [])):
         return "subtotal"
 
-    # =========================================================
     # 3) total
-    # - store_rules.total_keywords 우선
-    # - 없으면 기본 합계 fallback
-    # =========================================================
     if _is_total_line(text, store_rules):
         return "total"
 
-    # =========================================================
-    # 4) tax → noise
-    # =========================================================
+    # 4) tax/info
     if _contains_any_keyword(text, store_rules.get("tax_keywords", [])):
         return "noise"
 
-    # =========================================================
-    # 5) receipt_discount
-    # ex) 결제할인 : 2201606006 -4,410
-    # ex) 삼성카드할인 : 2211101938 -5,000
-    # ex) [앱]룰렛3천원 : 2201606243 -3,000
-    # =========================================================
+        # 5) receipt_discount
+    # 기존 패턴 우선
     if _is_receipt_discount_line(text, store_rules):
         return "receipt_discount"
 
-    # =========================================================
+    # emart:
+    # body 할인 힌트(에누리/행사/S-POINT)는 우선 discount_detail로 둔다.
+    # 실제 receipt_discount 여부는 semantic에서 tail 구간 판단 후 최종 결정.
+    if store == "emart" and _looks_like_emart_body_discount_line(text, store_rules):
+        return "discount_detail"
+
+    # emart receipt-level 할인 후보
+    if store == "emart" and _looks_like_emart_receipt_discount_line(text, store_rules):
+        return "receipt_discount"
+
     # 6) fee
-    # ex) 공 병 600
-    # =========================================================
     if _is_fee_line(text, store_rules):
         return "fee"
 
-    # =========================================================
     # 7) discount keyword
-    # ex) CPN / 자사 쿠폰 / [앱]
-    # =========================================================
     if _is_discount_keyword_line(text, store_rules):
         return "discount_keyword"
 
-    # =========================================================
     # 8) discount detail
-    # - rules pattern 우선
-    # - fallback 휴리스틱
-    # =========================================================
     if _matches_any_pattern(text, store_rules.get("discount_patterns", [])):
+        return "discount_detail"
+
+    # 단독 음수 금액 라인: -6,500 / -2,950 / -10,600
+    if _is_standalone_negative_amount_line(text):
         return "discount_detail"
 
     if _is_discount_detail_line(text):
         return "discount_detail"
 
-    # =========================================================
     # 9) item detail
-    # - rules pattern 우선
-    #   (emart 13자리 바코드 / inline item_detail 대응)
-    # - fallback 휴리스틱
-    # =========================================================
     if _matches_any_pattern(text, store_rules.get("item_patterns", [])):
         return "item_detail"
 
     if _is_item_detail_line(text):
         return "item_detail"
 
-    # =========================================================
-    # 10) discount target
-    # =========================================================
-    if _is_discount_target_line(text, store_rules):
-        return "discount_target"
-
-    # =========================================================
-    # 10-1) item_detail restore before fallback item_name
-    # - item_name 후보였지만 줄 끝 숫자 패턴이 item_detail 형태면 승격
-    # - ex) 설탕대신 스테비아 1. 11,980 1 11,980
-    # - ex) *8809205164010 4,820 4,820  -> qty=1 복구 후보
-    # =========================================================
+    # 9-1) emart tail-number fallback
     if store == "emart" and _looks_like_item_detail_from_tail_numbers(text):
         return "item_detail"
 
-    # =========================================================
+    # 10) discount target
+    if _is_discount_target_line(text, store_rules):
+        return "discount_target"
+
     # 11) fallback
-    # =========================================================
     return "item_name"
 
 
@@ -283,14 +254,15 @@ def _is_total_line(text: str, store_rules: Any) -> bool:
 
 
 def _is_receipt_discount_line(text: str, store_rules: Any) -> bool:
-    normalized = _normalize_space(text)
-
-    if _matches_any_pattern(normalized, store_rules.get("receipt_discount_patterns", [])):
+    if _matches_any_pattern(text, store_rules.get("receipt_discount_patterns", [])):
         return True
 
-    # fallback
-    if re.match(r"^.+할인\s*:\s*\d+\s*-\s*[\d,]+$", normalized):
-        return True
+    # fallback:
+    # 결제할인 : -5,000
+    # 카드할인 : -4,000
+    if _contains_any_keyword(text, store_rules.get("receipt_discount_keywords", [])):
+        if re.search(r":\s*-\s*[\d,]+\s*$", text):
+            return True
 
     return False
 
@@ -584,3 +556,63 @@ def _parse_qty_token(token: str) -> int | None:
         return int(stripped)
     except Exception:
         return None
+
+
+def _is_standalone_negative_amount_line(text: str) -> bool:
+    """
+    예:
+    - -6,500
+    - -2,950
+    - -10,600
+    """
+    normalized = _normalize_space(text)
+    return bool(re.fullmatch(r"-\d[\d,]*", normalized))
+
+
+def _looks_like_emart_receipt_discount_line(text: str, store_rules: Any) -> bool:
+    """
+    emart receipt-level 할인 후보
+    예:
+    - 결제할인 : -5,000
+    - 카드할인 : -4,000
+    - 삼성카드할인 : 2211101938 -5,000
+
+    주의:
+    - 여기서는 line 자체 형태만 판별
+    - 실제 '합계 ~ 결제대상금액 사이' 영역 판단은 semantic/tail 처리에서 최종 보강 가능
+    """
+    normalized = _normalize_space(text)
+
+    if not _contains_any_keyword(
+        normalized,
+        store_rules.get("receipt_discount_keywords", []),
+    ):
+        return False
+
+    # 마지막에 음수 금액이 오면 receipt_discount 후보
+    if re.search(r"-\s*[\d,]+\s*$", normalized):
+        return True
+
+    return False
+
+
+def _looks_like_emart_body_discount_line(text: str, store_rules: Any) -> bool:
+    """
+    emart body 영역에서 item 할인 후보로 볼 수 있는 할인 라인 힌트
+
+    예:
+    - 포인트에누리행사 -2,500
+    - 가공에누리(전점) -2,500
+    - 2021 채소 S-POINT -1,500
+
+    주의:
+    - 여기서는 line 자체 형태만 본다.
+    - 실제 item 귀속 여부는 semantic에서 body 구간인지 확인 후 결정한다.
+    """
+    normalized = _normalize_space(text)
+
+    hint_keywords = store_rules.get("body_discount_hint_keywords", [])
+    if not _contains_any_keyword(normalized, hint_keywords):
+        return False
+
+    return bool(re.search(r"-\s*[\d,]+\s*$", normalized))
