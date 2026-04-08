@@ -172,6 +172,43 @@ RECEIPT_QTY_KEYWORDS = {
     "총수량",
 }
 
+# =========================================================
+# RECEIPT DISCOUNT
+# =========================================================
+# 영수증 전역 할인 키워드
+#
+# 사용 목적:
+# - 합계 이후 ~ 결제대상금액 이전/주변에 등장하는 할인 라인을
+#   receipt_discount로 분류하기 위한 키워드
+#
+# 예:
+# - 결제할인 : -5,000
+# - 카드할인 : -4,000
+# - 삼성카드할인 : 2211101938 -5,000
+# - 청구할인 : -3,000
+#
+# 주의:
+# - 상품 바로 아래 단독 음수(-6,500)는 item-level discount_detail로 처리
+# - receipt-level 할인은 semantic에서 item에 붙이지 않고
+#   tail_info.receipt_discounts / summary.receipt_discount_total로 집계
+# =========================================================
+RECEIPT_DISCOUNT_KEYWORDS = {
+    "결제할인",
+    "카드할인",
+    "삼성카드할인",
+    "청구할인",
+    "포인트할인",
+}
+
+BODY_DISCOUNT_HINT_KEYWORDS = {
+    "에누리",
+    "행사",
+    "S-POINT",
+    "포인트에누리",
+    "포인트에누리행사",
+    "가공에누리",
+}
+
 
 # =========================================================
 # TAX / INFO
@@ -245,9 +282,11 @@ EMART_RULES: Dict[str, Any] = {
     "discount_target_suffix": DISCOUNT_TARGET_SUFFIX,
     "discount_target_prefix": DISCOUNT_TARGET_PREFIX,
 
+    "body_discount_hint_keywords": BODY_DISCOUNT_HINT_KEYWORDS,
     "subtotal_keywords": SUBTOTAL_KEYWORDS,
     "total_keywords": TOTAL_KEYWORDS,
     "receipt_qty_keywords": RECEIPT_QTY_KEYWORDS,
+    "receipt_discount_keywords": RECEIPT_DISCOUNT_KEYWORDS,
     "tax_keywords": TAX_KEYWORDS,
     "noise_keywords": NOISE_KEYWORDS,
 

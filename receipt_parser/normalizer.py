@@ -63,6 +63,15 @@ LEADING_BRACKET_TAG_RE = re.compile(r"^\[[^\]]+\]\s*")
 EMART_PERCENT_NOISE_BEFORE_PRICE_RE = re.compile(
     r"(?P<left>\D|^)(?P<noise>\d{1,3}\s*%)\s*(?P<price>\d{1,3}(?:,\d{3})+)(?=\s+\d+\s+\d{1,3}(?:,\d{3})+\b)"
 )
+# emart OCR 숫자 토큰 끝 노이즈
+# 예)
+# 3,980| -> 3,980
+# 2|     -> 2
+# 1!     -> 1
+# 1.     -> 1   (qty 위치에서 자주 발생)
+EMART_TRAILING_OCR_NUM_NOISE_RE = re.compile(
+    r"(?P<num>\d[\d,]*)(?P<noise>[|!Il\.]+)(?=\s|$)"
+)
 
 # =========================================================
 # Known keyword normalization
@@ -393,21 +402,78 @@ def _normalize_store(store: str) -> str:
 def _normalize_emart_line_safe(text: str) -> str:
     """
     Emart 전용 안전 정규화
-    - 금액 영역 바로 앞에 OCR 배경 노이즈로 끼어든 '숫자+%' 패턴 제거
-    - 예:
-      "* 풀콩나물200G 100 %1,590 1 1,590"
-      -> "* 풀콩나물200G 1,590 1 1,590"
+
+    처리:
+    1) 금액 영역 바로 앞에 OCR 배경 노이즈로 끼어든 '숫자+%' 패턴 제거
+       예) "* 풀콩나물200G 100 %1,590 1 1,590"
+           -> "* 풀콩나물200G 1,590 1 1,590"
+
+    2) 숫자 토큰 끝에 붙은 OCR 찌꺼기 제거
+       예)
+       - 3,980| -> 3,980
+       - 2|     -> 2
+       - 1!     -> 1
+       - 1.     -> 1
 
     주의:
-    - 모든 %를 제거하지 않는다.
-    - qty/price 구조가 뒤따르는 item_detail 형태에서만 제한적으로 적용한다.
-    - discount/keyword 해석은 하지 않는다.
+    - 모든 기호를 전역 제거하지 않는다.
+    - emart line에서 패턴 매칭 성공률을 높이는 수준까지만 수행한다.
     """
 
-    def repl(m: re.Match) -> str:
+    # ---------------------------------------------------------
+    # 1) 배경 % OCR 노이즈 제거
+    # ---------------------------------------------------------
+    def percent_repl(m: re.Match) -> str:
         left = m.group("left")
         price = m.group("price")
         return f"{left}{price}"
 
-    text = EMART_PERCENT_NOISE_BEFORE_PRICE_RE.sub(repl, text)
+    text = EMART_PERCENT_NOISE_BEFORE_PRICE_RE.sub(percent_repl, text)
+
+    # ---------------------------------------------------------
+    # 2) 숫자 토큰 끝 OCR 찌꺼기 제거
+    #    ex) 3,980| / 2| / 1! / 1.
+    # ---------------------------------------------------------
+    text = _normalize_emart_numeric_token_noise(text)
+
     return text
+
+
+def _normalize_emart_numeric_token_noise(text: str) -> str:
+    """
+    emart line에서 숫자 토큰 끝에 붙은 OCR 찌꺼기 제거
+
+    예:
+    - 후레쉬 비피더스 12입 3,980| 1 3,980
+      -> 후레쉬 비피더스 12입 3,980 1 3,980
+
+    - 이태리안피자치즈800g 9,980 2| 19,960
+      -> 이태리안피자치즈800g 9,980 2 19,960
+
+    - 노브랜드 피클 720ml 2,080 1! 2,080
+      -> 노브랜드 피클 720ml 2,080 1 2,080
+
+    - 노브랜드스파게티1kGl 1,780 1. 1,780
+      -> 노브랜드스파게티1kGl 1,780 1 1,780
+    """
+    if not text:
+        return text
+
+    def repl(m: re.Match) -> str:
+        num = m.group("num")
+        noise = m.group("noise") or ""
+
+        # 숫자 토큰 끝의 | ! I l 은 무조건 제거
+        cleaned_noise = noise.replace("|", "").replace("!", "").replace("I", "").replace("l", "")
+
+        # 점(.)은 emart item_detail 꼬리 숫자 구간에서 qty OCR 오류로 자주 나오므로 제거
+        cleaned_noise = cleaned_noise.replace(".", "")
+
+        # 남는 게 없으면 숫자만 반환
+        if not cleaned_noise:
+            return num
+
+        # 혹시 예상 밖 기호가 남아도 숫자만 유지
+        return num
+
+    return EMART_TRAILING_OCR_NUM_NOISE_RE.sub(repl, text)
