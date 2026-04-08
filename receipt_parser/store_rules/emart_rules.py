@@ -153,6 +153,27 @@ TOTAL_KEYWORDS = {
 
 
 # =========================================================
+# RECEIPT QTY
+# =========================================================
+# 영수증 전체 상품 수량 라인
+# 예:
+# - 총 품목 수량 15
+# - 총상품수량 15
+# - 총수량 15
+#
+# 주의:
+# - total 금액 라인이 아님
+# - noise로 버리지 않고 별도 line_type(receipt_qty)로 처리해야 함
+# =========================================================
+
+RECEIPT_QTY_KEYWORDS = {
+    "총 품목 수량",
+    "총상품수량",
+    "총수량",
+}
+
+
+# =========================================================
 # TAX / INFO
 # =========================================================
 
@@ -177,7 +198,6 @@ NOISE_KEYWORDS = {
     "과세 물품",
     "부 가 세",
     "부가세 면세 물품가액",
-    "총 품목 수량",
     "합 계",
     "공 병",
     "공병",
@@ -227,6 +247,7 @@ EMART_RULES: Dict[str, Any] = {
 
     "subtotal_keywords": SUBTOTAL_KEYWORDS,
     "total_keywords": TOTAL_KEYWORDS,
+    "receipt_qty_keywords": RECEIPT_QTY_KEYWORDS,
     "tax_keywords": TAX_KEYWORDS,
     "noise_keywords": NOISE_KEYWORDS,
 

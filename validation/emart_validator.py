@@ -37,7 +37,11 @@ def validate_emart(semantic_receipt: Dict[str, Any]) -> Dict[str, Any]:
     tail_info = semantic_receipt.get("tail_info", {})
 
     item_result = _validate_items(items)
-    receipt_result = _validate_receipt_totals(items, tail_info)
+    receipt_result = _validate_receipt_totals(
+        items=items,
+        tail_info=tail_info,
+        lines=semantic_receipt.get("lines", []),
+    )
 
     errors: List[Dict[str, Any]] = []
     warnings: List[Dict[str, Any]] = []
@@ -80,6 +84,8 @@ def validate_emart(semantic_receipt: Dict[str, Any]) -> Dict[str, Any]:
                 "payment_total_match": receipt_result["payment_total_match"],
                 "item_count": receipt_result["item_count"],
                 "item_qty_sum": receipt_result["item_qty_sum"],
+                "receipt_qty": receipt_result["receipt_qty"],
+                "qty_match": receipt_result["qty_match"],
                 "subtotal_count_sum": None,
                 "subtotal_count_match": None,
                 "computed_receipt_discount_sum": receipt_result["computed_receipt_discount_sum"],
@@ -195,6 +201,7 @@ def _validate_items(items: List[Dict[str, Any]]) -> Dict[str, Any]:
 def _validate_receipt_totals(
     items: List[Dict[str, Any]],
     tail_info: Dict[str, Any],
+    lines: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     errors: List[Dict[str, Any]] = []
     warnings: List[Dict[str, Any]] = []
@@ -210,11 +217,13 @@ def _validate_receipt_totals(
 
     item_total_match: Optional[bool] = None
     payment_total_match: Optional[bool] = None
+    qty_match: Optional[bool] = None
 
     is_total_inferred = False
     inferred_total: Optional[int] = None
     inferred_total_source: Optional[str] = None
     requires_user_total_confirmation = False
+    receipt_total_source: Optional[str] = None
 
     if item_total is None:
         warnings.append({
@@ -293,6 +302,19 @@ def _validate_receipt_totals(
 
     item_count = len(items)
     item_qty_sum = _sum_item_qty(items)
+    receipt_qty = _extract_receipt_qty_from_lines(lines)
+    qty_match: Optional[bool] = None
+
+    if receipt_qty is not None:
+        qty_match = (receipt_qty == item_count)
+
+        if not qty_match:
+            errors.append({
+                "level": "receipt",
+                "reason": "receipt_qty != sum(item.qty)",
+                "receipt_qty": receipt_qty,
+                "item_qty_sum": item_count,
+            })
 
     receipt_total_source = _extract_receipt_total_source_from_summary(summary)
     if is_total_inferred:
@@ -312,6 +334,8 @@ def _validate_receipt_totals(
         "payment_total_match": payment_total_match,
         "item_count": item_count,
         "item_qty_sum": item_qty_sum,
+        "receipt_qty": receipt_qty,
+        "qty_match": qty_match,
         "is_total_inferred": is_total_inferred,
         "inferred_total": inferred_total,
         "inferred_total_source": inferred_total_source,
@@ -521,3 +545,25 @@ def _safe_int(value):
         return int(value)
     except Exception:
         return None
+
+
+def _extract_receipt_qty_from_lines(lines: List[Dict[str, Any]]) -> Optional[int]:
+    """
+    parser structured lines에서 receipt_qty 추출
+
+    기대 line 예:
+    {
+        "line_type": "receipt_qty",
+        "receipt_qty": 15,
+        ...
+    }
+    """
+    for row in lines:
+        if row.get("line_type") != "receipt_qty":
+            continue
+
+        receipt_qty = row.get("receipt_qty")
+        if isinstance(receipt_qty, int):
+            return receipt_qty
+
+    return None

@@ -57,6 +57,12 @@ LEADING_ITEM_NO_RE = re.compile(r"^\d{2,3}\*?\s+")
 LEADING_BRACKET_PREFIX_RE = re.compile(r"^\([A-Za-z]{1,3}\)")
 LEADING_BRACKET_TAG_RE = re.compile(r"^\[[^\]]+\]\s*")
 
+# emart OCR noise:
+# 예) "100 %1,590", "50 %2,980"
+# 금액 토큰 바로 앞에 끼어든 숫자+% 노이즈 제거용
+EMART_PERCENT_NOISE_BEFORE_PRICE_RE = re.compile(
+    r"(?P<left>\D|^)(?P<noise>\d{1,3}\s*%)\s*(?P<price>\d{1,3}(?:,\d{3})+)(?=\s+\d+\s+\d{1,3}(?:,\d{3})+\b)"
+)
 
 # =========================================================
 # Known keyword normalization
@@ -104,6 +110,9 @@ def normalize_line(line_text: str, store: str, store_rules: object | None = None
     text = _sign_spacing_normalization(text)
 
     normalized_store = _normalize_store(store)
+
+    if normalized_store == "emart":
+        text = _normalize_emart_line_safe(text)
 
     if normalized_store == "costco":
         text = _normalize_costco_line_safe(text)
@@ -379,3 +388,26 @@ def _normalize_hanaro_line_safe(text: str) -> str:
 
 def _normalize_store(store: str) -> str:
     return str(store or "").strip().lower()
+
+
+def _normalize_emart_line_safe(text: str) -> str:
+    """
+    Emart 전용 안전 정규화
+    - 금액 영역 바로 앞에 OCR 배경 노이즈로 끼어든 '숫자+%' 패턴 제거
+    - 예:
+      "* 풀콩나물200G 100 %1,590 1 1,590"
+      -> "* 풀콩나물200G 1,590 1 1,590"
+
+    주의:
+    - 모든 %를 제거하지 않는다.
+    - qty/price 구조가 뒤따르는 item_detail 형태에서만 제한적으로 적용한다.
+    - discount/keyword 해석은 하지 않는다.
+    """
+
+    def repl(m: re.Match) -> str:
+        left = m.group("left")
+        price = m.group("price")
+        return f"{left}{price}"
+
+    text = EMART_PERCENT_NOISE_BEFORE_PRICE_RE.sub(repl, text)
+    return text
