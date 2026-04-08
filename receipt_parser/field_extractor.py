@@ -75,6 +75,27 @@ def extract_fields(
             patterns=store_rules.get("item_patterns", []),
             is_discount=False,
         )
+
+        # ---------------------------------------------------------
+        # pattern 매칭 실패 시:
+        # item_name fallback 직전 classifier에서 item_detail로 승격된
+        # emart inline/tail-number 케이스를 복구 추출
+        # ex) 설탕대신 스테비아 1. 11,980 1 11,980
+        # ex) *8809205164010 4,820 4,820
+        # ---------------------------------------------------------
+        if (
+            store == "emart"
+            and _is_empty_detail_result(parsed)
+        ):
+            restored = _restore_item_detail_from_tail_numbers(
+                raw=raw,
+                text=text,
+                store=store,
+                store_rules=store_rules,
+            )
+            if restored is not None:
+                parsed = restored
+
         base.update(parsed)
 
         # emart 통합형 한 줄 item_detail이면 이름도 함께 복원
@@ -83,13 +104,13 @@ def extract_fields(
             and not base.get("name_raw")
             and not re.match(r"^\*?\d{13}\s", raw.strip())
         ):
-            inline_name = _extract_inline_item_name_for_emart(raw)
+            inline_name = _extract_inline_item_name_for_emart(normalized_line_text)
             if inline_name:
                 base["name_raw"] = cleanup_name_candidate(
                     text=inline_name,
                     store=store,
                     store_rules=store_rules,
-        )
+                )
 
         return base
 
@@ -135,6 +156,10 @@ def extract_fields(
 
         return base
 
+    if line_type == "receipt_qty":
+        base["receipt_qty"] = _extract_receipt_qty(text)
+        return base
+
     if line_type == "total":
         base["price_raw"] = _extract_last_amount(text)
         return base
@@ -170,6 +195,7 @@ def _empty_fields() -> Dict[str, Any]:
         "discount_raw": None,
         "name_raw": None,
         "subtotal_count": None,
+        "receipt_qty": None,
         "is_restored": False,
         "restore_reason": None,
         "restored_fields": [],
@@ -327,6 +353,153 @@ def _parse_detail_line(
     return _empty_fields()
 
 
+def _is_empty_detail_result(parsed: Dict[str, Any]) -> bool:
+    """
+    _parse_detail_line 실패 여부 판단
+    """
+    return (
+        parsed.get("code") is None
+        and parsed.get("qty") is None
+        and parsed.get("unit_price_raw") is None
+        and parsed.get("price_raw") is None
+    )
+
+
+def _restore_item_detail_from_tail_numbers(
+    raw: str,
+    text: str,
+    store: str,
+    store_rules: Any,
+) -> Optional[Dict[str, Any]]:
+    """
+    classifier에서 item_detail로 승격된 라인에 대해
+    tail 숫자 패턴으로 item_detail 필드 복구
+
+    허용 케이스:
+    1) 상품명 + unit_price + qty + total_price
+       ex) 설탕대신 스테비아 1. 11,980 1 11,980
+    2) 상품명 + unit_price + total_price
+       ex) 국산 볶음땅콩150g 4,820 4,820
+       -> qty=1 복구
+    """
+    tokens = text.split()
+    if len(tokens) < 3:
+        return None
+
+    numeric_indices = [
+        idx for idx, token in enumerate(tokens)
+        if re.fullmatch(r"[\d,]+", token)
+    ]
+    if len(numeric_indices) < 2:
+        return None
+
+    # ---------------------------------------------------------
+    # case 1) 마지막 3개 숫자 토큰 = unit_price, qty, total_price
+    # ---------------------------------------------------------
+    if len(numeric_indices) >= 3:
+        last3 = numeric_indices[-3:]
+
+        if last3 == list(range(last3[0], last3[0] + 3)):
+            unit_price_raw = cast_amount_token(tokens[last3[0]])
+            qty = cast_qty_token(tokens[last3[1]])
+            price_raw = cast_amount_token(tokens[last3[2]])
+
+            if (
+                unit_price_raw is not None
+                and qty is not None
+                and price_raw is not None
+                and qty >= 1
+                and price_raw >= unit_price_raw
+                and unit_price_raw * qty == price_raw
+            ):
+                name_tokens = tokens[:last3[0]]
+                if not name_tokens:
+                    return None
+
+                name_text = " ".join(name_tokens).strip()
+                name_text = re.sub(r"^\*\s*", "", name_text)
+                name_text = re.sub(r"^\d{2,3}\*?\s*", "", name_text)
+
+                name_raw = cleanup_name_candidate(
+                    text=name_text,
+                    store=store,
+                    store_rules=store_rules,
+                )
+
+                return {
+                    "code": None,
+                    "qty": qty,
+                    "unit_price_raw": unit_price_raw,
+                    "price_raw": price_raw,
+                    "discount_raw": None,
+                    "name_raw": name_raw,
+                    "subtotal_count": None,
+                    "is_restored": True,
+                    "restore_reason": "item_detail restored from tail number pattern (unit, qty, total)",
+                    "restored_fields": ["name_raw", "unit_price_raw", "qty", "price_raw"],
+                }
+
+    # ---------------------------------------------------------
+    # case 2) 마지막 2개 숫자 토큰 = unit_price, total_price
+    #          unit_price == total_price 이면 qty=1 복구
+    # ---------------------------------------------------------
+    last2 = numeric_indices[-2:]
+    if last2 == list(range(last2[0], last2[0] + 2)):
+        unit_price_raw = cast_amount_token(tokens[last2[0]])
+        price_raw = cast_amount_token(tokens[last2[1]])
+
+        if (
+            unit_price_raw is not None
+            and price_raw is not None
+            and unit_price_raw == price_raw
+        ):
+            name_tokens = tokens[:last2[0]]
+            if not name_tokens:
+                return None
+
+            name_text = " ".join(name_tokens).strip()
+            name_text = re.sub(r"^\*\s*", "", name_text)
+            name_text = re.sub(r"^\d{2,3}\*?\s*", "", name_text)
+
+            # 바코드형이면 여기서 이름 복구하지 않음
+            if re.fullmatch(r"\*?\d{13}", name_text.replace(" ", "")):
+                return {
+                    "code": name_text.lstrip("*"),
+                    "qty": 1,
+                    "unit_price_raw": unit_price_raw,
+                    "price_raw": price_raw,
+                    "discount_raw": None,
+                    "name_raw": None,
+                    "subtotal_count": None,
+                    "is_restored": True,
+                    "restore_reason": "qty restored from tail number pattern (unit == total -> qty=1)",
+                    "restored_fields": ["qty"],
+                }
+
+            name_raw = cleanup_name_candidate(
+                text=name_text,
+                store=store,
+                store_rules=store_rules,
+            )
+
+            return {
+                "code": None,
+                "qty": 1,
+                "unit_price_raw": unit_price_raw,
+                "price_raw": price_raw,
+                "discount_raw": None,
+                "name_raw": name_raw,
+                "subtotal_count": None,
+                "is_restored": True,
+                "restore_reason": "item_detail restored from tail number pattern (unit == total -> qty=1)",
+                "restored_fields": ["name_raw", "qty", "unit_price_raw", "price_raw"],
+            }
+
+    return None
+
+
+
+
 def _parse_receipt_discount_line(
     raw: str,
     text: str,
@@ -446,6 +619,39 @@ def _extract_subtotal_count(text: str) -> Optional[int]:
     patterns = [
         r"(?:상품수소계|총상품수|총싱품수|총상품)\D*(\d+)",
         r"(?:Sub[-_]?(?:총상품수|총싱품수|총상품))\D*(\d+)",
+    ]
+
+    for pattern in patterns:
+        m = re.search(pattern, compact, flags=re.IGNORECASE)
+        if m:
+            try:
+                return int(m.group(1))
+            except (TypeError, ValueError):
+                return None
+
+    return None
+
+def _extract_receipt_qty(text: str) -> Optional[int]:
+    """
+    영수증 전체 상품 수량 추출
+
+    예:
+    - 총 품목 수량 15
+    - 총상품수량 15
+    - 총수량 15
+
+    반환:
+    - 영수증 전체 품목 수량(int)
+    """
+    if not text:
+        return None
+
+    compact = re.sub(r"\s+", "", text)
+
+    patterns = [
+        r"(?:총품목수량)\D*(\d+)",
+        r"(?:총상품수량)\D*(\d+)",
+        r"(?:총수량)\D*(\d+)",
     ]
 
     for pattern in patterns:

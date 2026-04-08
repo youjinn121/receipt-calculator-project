@@ -65,6 +65,16 @@ def classify_line(
         return "noise"
 
     # =========================================================
+    # 0) receipt qty
+    # ex) 총 품목 수량 15
+    # note:
+    # - noise보다 먼저 잡아야 한다.
+    # - emart_rules.py에서 receipt_qty_keywords로 관리
+    # =========================================================
+    if _is_receipt_qty_line(text, store_rules):
+        return "receipt_qty"
+
+    # =========================================================
     # 1) noise
     # =========================================================
     if _is_noise_line(raw, text, store_rules):
@@ -207,6 +217,33 @@ def _get_end_section_priority(
 # =========================================================
 # Internal helpers
 # =========================================================
+def _is_receipt_qty_line(text: str, store_rules: Any) -> bool:
+    """
+    영수증 전체 상품 수량 라인 판정
+
+    예:
+    - 총 품목 수량 15
+    - 총상품수량 15
+    - 총수량 15
+
+    주의:
+    - total 금액 라인 아님
+    - noise보다 먼저 잡아야 한다.
+    """
+    normalized = _normalize_space(text)
+
+    for kw in store_rules.get("receipt_qty_keywords", []):
+        normalized_kw = _normalize_space(kw)
+        if not normalized_kw:
+            continue
+
+        if normalized.startswith(normalized_kw):
+            # 키워드 뒤에 수량 숫자가 따라오는 형태만 허용
+            if re.search(rf"^{re.escape(normalized_kw)}\s+\d+\s*$", normalized):
+                return True
+
+    return False
+
 
 def _is_noise_line(raw: str, text: str, store_rules: Any) -> bool:
     if _contains_any_keyword(text, store_rules.get("noise_keywords", [])):
