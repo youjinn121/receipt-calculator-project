@@ -1,7 +1,7 @@
 from sqlalchemy import Column, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
-from backend.app.db.base import Base
+from backend.app.db.base_class import Base
 
 
 class ReceiptImage(Base):
@@ -11,5 +11,6 @@ class ReceiptImage(Base):
     receipt_id = Column(Integer, ForeignKey("receipts.id", ondelete="CASCADE"), nullable=False)
     page_no = Column(Integer, nullable=False)
     file_path = Column(String, nullable=False)
+    ocr_json_path = Column(String, nullable=True)
 
     receipt = relationship("Receipt", back_populates="images")

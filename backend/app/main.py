@@ -1,14 +1,19 @@
 from fastapi import FastAPI
 
+import backend.app.db.base
+from backend.app.api.receipt import router as receipt_router
+from backend.app.db.base_class import Base
 from backend.app.db.database import engine
-from backend.app.db.base import Base
 
-app = FastAPI(title="Receipt Calculator API", version="0.1.0")
+app = FastAPI(
+    title="Receipt Calculator API",
+    version="0.1.0",
+)
 
-# 앱 시작 시 테이블 생성
-Base.metadata.create_all(bind=engine)
+# Base.metadata.create_all(bind=engine)
 
+app.include_router(receipt_router)
 
 @app.get("/")
 def root():
-    return {"message": "Receipt Calculator API is running"}
+    return {"message": "Receipt API is running"}
