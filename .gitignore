@@ -216,3 +216,6 @@ data/
 
 __pycache__/
 *.pyc
+
+# DB 파일
+*.db
