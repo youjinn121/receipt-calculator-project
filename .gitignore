@@ -219,3 +219,9 @@ __pycache__/
 
 # DB 파일
 *.db
+
+# storage (영수증 업로드 / OCR 결과)
+backend/storage/
+
+# OCR 결과
+*.ocr.json

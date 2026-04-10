@@ -1,7 +1,7 @@
 from sqlalchemy import Column, ForeignKey, Integer, JSON, String
 from sqlalchemy.orm import relationship
 
-from backend.app.db.base import Base
+from backend.app.db.base_class import Base
 
 
 class ReceiptItem(Base):

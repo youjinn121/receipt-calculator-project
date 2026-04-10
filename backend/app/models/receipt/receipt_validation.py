@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Float, ForeignKey, Integer, Boolean
 from sqlalchemy.orm import relationship
 
-from backend.app.db.base import Base
+from backend.app.db.base_class import Base
 
 
 class ReceiptValidation(Base):

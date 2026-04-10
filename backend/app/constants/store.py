@@ -1,0 +1,1 @@
+SUPPORTED_STORES = {"costco", "emart", "hanaro"}
