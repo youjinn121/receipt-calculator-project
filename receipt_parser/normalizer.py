@@ -52,6 +52,11 @@ THOUSAND_DOT_RE = re.compile(r"(?<!\d)([+-]?\d{1,3})\.(\d{3})(?!\d)")
 LEADING_STAR_CODE_RE = re.compile(r"^\*\s*(\d{4,13}\b.*)$")
 ITEM_NUMBER_PREFIX_DETAIL_RE = re.compile(r"^\d{2,3}\*(\d{4,13}\b.*)$")
 
+# Hanaro: 001 *8801448212053 ... / 001 * 8801448212053 ...
+ITEM_NUMBER_SPACE_STAR_DETAIL_RE = re.compile(
+    r"^\d{2,3}\s*\*\s*(\d{4,13}\b.*)$"
+)
+
 # emart 통합형 이름 후보에서 제거할 prefix
 LEADING_ITEM_NO_RE = re.compile(r"^\d{2,3}\*?\s+")
 LEADING_BRACKET_PREFIX_RE = re.compile(r"^\([A-Za-z]{1,3}\)")
@@ -79,6 +84,8 @@ EMART_TRAILING_OCR_NUM_NOISE_RE = re.compile(
 
 KNOWN_SPACED_KEYWORDS = {
     "끝 전할 인": "끝전할인",
+    "끝 전 할인": "끝전할인",
+    "끝 전 할 인": "끝전할인",
     "부 가 세": "부가세",
     "합 계": "합계",
     "면세 물품": "면세 물품",
@@ -88,6 +95,10 @@ KNOWN_SPACED_KEYWORDS = {
     "총 싱품수": "총상품수",
     "총 상품수": "총상품수",
     "총 품목 수량": "총 품목 수량",
+    "총 구매액": "총구매액",
+    "총 구 매 액": "총구매액",
+    "내 실금액": "내실금액",
+    "내 실 금액": "내실금액",
     "(*) 면세 물품": "(*)면세 물품",
 }
 
@@ -378,17 +389,26 @@ def _normalize_costco_line_safe(text: str) -> str:
 def _normalize_hanaro_line_safe(text: str) -> str:
     """
     Hanaro 전용 안전 정규화
+
+    처리 케이스:
     - *8801045352107 3,060 1 3,060
+    - * 8809636710008 7,890 1 7,890
     - 001*8801448212053 1,680 1 1,680
-    같은 detail 후보를 extractor가 읽기 쉽게 정리
+    - 001 *8801448212053 1,680 1 1,680
+    - 001 * 8801448212053 1,680 1 1,680
     """
-    # *8801045352107 ... -> 8801045352107 ...
+    # *8801045352107 ... / * 8801045352107 ...
     m = LEADING_STAR_CODE_RE.match(text)
     if m:
         text = m.group(1).strip()
 
-    # 001*8801448212053 ... -> 8801448212053 ...
+    # 001*8801448212053 ...
     m = ITEM_NUMBER_PREFIX_DETAIL_RE.match(text)
+    if m:
+        text = m.group(1).strip()
+
+    # 001 *8801448212053 ... / 001 * 8801448212053 ...
+    m = ITEM_NUMBER_SPACE_STAR_DETAIL_RE.match(text)
     if m:
         text = m.group(1).strip()
 

@@ -141,8 +141,11 @@ def extract_fields(
 
         base.update(parsed)
 
-        # emart 프로모션명 + 할인금액 구조에서는 이름을 같이 들고 가도 됨
-        if store == "emart" and not base.get("name_raw"):
+        # emart / hanaro 프로모션명 + 할인금액 구조에서는 이름을 같이 들고 간다.
+        # 예:
+        # - 컵밥류 2+1 -1,660
+        # - 삼겹 한돈자조금 할인 -1,369
+        if store in {"emart", "hanaro"} and not base.get("name_raw"):
             discount_name = _extract_discount_name(raw)
             if discount_name:
                 base["name_raw"] = cleanup_name_candidate(
@@ -243,7 +246,7 @@ def _parse_standalone_negative_discount_line(
     if not normalized:
         return None
 
-    if not re.fullmatch(r"-\d[\d,]*", normalized):
+    if not re.fullmatch(r"-\d[\d,.]*", normalized):
         return None
 
     discount_amount = _extract_last_discount_amount(normalized)
@@ -730,12 +733,13 @@ def _extract_last_amount(text: str) -> Optional[int]:
     예:
     - 상품수 소계 : 10
     - 합계 (VAT 포함) 232,330
-    - (Sub-총상품수 : 13) 144420
+    - 총구매액: 30,400
+    - 내실금액: 30.400
     - 공 병 600
 
     반환값은 subtotal / total / fee 계열에서 price_raw로 사용된다.
     """
-    candidates = re.findall(r"[+-]?\d[\d,]*-?[Tt]?", text)
+    candidates = re.findall(r"[+-]?\d[\d,.]*-?[Tt]?", text)
     if not candidates:
         return None
 
@@ -748,14 +752,16 @@ def _extract_last_discount_amount(text: str) -> Optional[int]:
 
     예:
     - 컵밥류 2+1 -1,660
+    - 삼겹 한돈자조금 할인 -1.369
     - 결제할인 : 2201606006 -4,410
-    - [앱]룰렛3천원 : 2201606243 -3,000
+    - 끝전할인: -4
+    - 쿠폰할인: -660
     """
-    m = re.search(r"-\s*([\d,]+)\s*$", text)
+    m = re.search(r"-\s*([\d,.]+)\s*$", text)
     if m:
         return cast_discount_amount(m.group(1))
 
-    candidates = re.findall(r"[+-]?\d[\d,]*-?[Tt]?", text)
+    candidates = re.findall(r"[+-]?\d[\d,.]*-?[Tt]?", text)
     if not candidates:
         return None
 
@@ -773,7 +779,7 @@ def _extract_discount_name(raw: str) -> Optional[str]:
     if not raw:
         return None
 
-    m = re.match(r"^(.*?)\s*-\s*[\d,]+\s*$", raw.strip())
+    m = re.match(r"^(.*?)\s*-\s*[\d,.]+\s*$", raw.strip())
     if m:
         name = m.group(1).strip()
         return name or None

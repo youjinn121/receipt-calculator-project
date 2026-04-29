@@ -1,5 +1,4 @@
 from __future__ import annotations
-print("PARSER_PIPELINE PATH:", __file__)
 
 import ast
 import re
@@ -387,6 +386,11 @@ def trim_lines_before_end_section(
             normalized_lines=normalized_lines,
             store_rules=store_rules,
         )
+    elif store == "hanaro":
+        end_idx = _find_hanaro_end_idx(
+            normalized_lines=normalized_lines,
+            store_rules=store_rules,
+        )
     else:
         end_idx: Optional[int] = None
 
@@ -536,14 +540,20 @@ def trim_lines_from_start_section(
 
     store = str(store or "").strip().lower()
 
-    if store != "emart":
+    if store == "emart":
+        start_idx = _find_emart_start_idx(
+            lines=lines,
+            store=store,
+            store_rules=store_rules,
+        )
+    elif store == "hanaro":
+        start_idx = _find_hanaro_start_idx(
+            lines=lines,
+            store=store,
+            store_rules=store_rules,
+        )
+    else:
         return lines
-
-    start_idx = _find_emart_start_idx(
-        lines=lines,
-        store=store,
-        store_rules=store_rules,
-    )
 
     if start_idx is None:
         return lines
@@ -599,3 +609,152 @@ def _normalize_for_compare(text: str) -> str:
     - 대문자 통일
     """
     return "".join(str(text or "").strip().upper().split())
+
+def _find_hanaro_end_idx(
+    normalized_lines: List[str],
+    store_rules: Dict[str, Any],
+) -> Optional[int]:
+    """
+    hanaro 종료 포인트 선택
+
+    우선순위:
+    1) 내실금액 마지막 위치
+    2) 내실금액 뒤 receipt-level 할인/총할인액이 이어지면 그 마지막 위치
+    3) 총구매액 마지막 위치 fallback
+
+    예:
+    - 총구매액: 30,400
+    - 끝전할인: -4
+    - 총할인액: -4
+    - 내실금액: 30,400
+    """
+    total_idx: Optional[int] = None
+    subtotal_idx: Optional[int] = None
+    receipt_discount_idx: Optional[int] = None
+
+    total_keywords = store_rules.get("total_keywords", [])
+    subtotal_keywords = store_rules.get("subtotal_keywords", [])
+    receipt_discount_keywords = store_rules.get("receipt_discount_keywords", [])
+
+    for idx, normalized in enumerate(normalized_lines):
+        if _starts_with_any_keyword(normalized, total_keywords):
+            total_idx = idx
+
+        if _contains_any_keyword(normalized, subtotal_keywords):
+            subtotal_idx = idx
+
+        if _is_hanaro_receipt_discount_candidate(
+            normalized,
+            receipt_discount_keywords=receipt_discount_keywords,
+        ):
+            receipt_discount_idx = idx
+
+    # 내실금액이 있으면 최종 결제금액 기준으로 종료
+    if total_idx is not None:
+        # total 뒤에 receipt_discount/총할인액 같은 요약 라인이 더 있으면 거기까지 포함
+        if receipt_discount_idx is not None and receipt_discount_idx > total_idx:
+            return receipt_discount_idx
+        return total_idx
+
+    # 내실금액이 없고, 총구매액 이후 receipt_discount가 있으면 그 라인까지 포함
+    if (
+        subtotal_idx is not None
+        and receipt_discount_idx is not None
+        and receipt_discount_idx > subtotal_idx
+    ):
+        return receipt_discount_idx
+
+    # fallback: 총구매액
+    if subtotal_idx is not None:
+        return subtotal_idx
+
+    return None
+
+
+def _is_hanaro_receipt_discount_candidate(
+    text: str,
+    receipt_discount_keywords: List[str] | set[str],
+) -> bool:
+    """
+    hanaro 영수증 하단 전역 할인 후보
+
+    예:
+    - 끝전할인: -4
+    - 끝전할인 -4
+    - 끝전할 인: -1
+    - 쿠폰할인: -660
+    - 총할인액: -4
+    - 농축산물 할인쿠폰 (4월2차) -1,400
+    """
+    normalized = " ".join(str(text or "").strip().split())
+
+    if not _contains_any_keyword(normalized, receipt_discount_keywords):
+        return False
+
+    return bool(re.search(r"-\s*[\d,.]+\s*$", normalized))
+
+
+def _find_hanaro_start_idx(
+    lines: List[Any],
+    store: str,
+    store_rules: Dict[str, Any],
+) -> Optional[int]:
+    """
+    hanaro 시작 포인트 찾기
+
+    후보:
+    - 상품(코드) 단가 수량 금액
+    - 상품코드 단가 수량 금액
+    - 상품명 단가 수량 금액
+    - 단가 수량 금액
+
+    헤더가 없으면 첫 item_detail 후보 라인 직전까지는 유지하지 않고,
+    첫 item_detail 앞의 상품명 라인을 살리기 위해 item_detail 발견 시 max(idx-1, 0)을 반환.
+    """
+    start_candidates = [
+        "상품(코드) 단가 수량 금액",
+        "상품코드 단가 수량 금액",
+        "상품명 단가 수량 금액",
+        "단가 수량 금액",
+    ]
+
+    normalized_candidates = [
+        _normalize_for_compare(c) for c in start_candidates
+    ]
+
+    normalized_lines: List[str] = []
+
+    for idx, raw_line in enumerate(lines):
+        plain = line_to_plain_text(raw_line)
+
+        normalized = normalize_line(
+            line_text=plain,
+            store=store,
+            store_rules=store_rules,
+        )
+        normalized_lines.append(normalized)
+
+        normalized_text = _normalize_for_compare(normalized)
+
+        for candidate in normalized_candidates:
+            if normalized_text == candidate:
+                # 헤더 다음 줄부터 시작
+                return idx + 1
+
+    # header가 없을 때 fallback:
+    # 첫 item_detail 라인을 찾고, 바로 앞 상품명 라인을 같이 살림
+    for idx, normalized in enumerate(normalized_lines):
+        if _matches_any_pattern(normalized, store_rules.get("item_patterns", [])):
+            return max(idx - 1, 0)
+
+    return None
+
+
+def _matches_any_pattern(text: str, patterns: List[re.Pattern] | set[re.Pattern]) -> bool:
+    normalized = " ".join(str(text or "").strip().split())
+
+    for pattern in patterns:
+        if pattern.match(normalized):
+            return True
+
+    return False

@@ -85,10 +85,24 @@ def classify_line(
     if _contains_any_keyword(text, store_rules.get("tax_keywords", [])):
         return "noise"
 
-        # 5) receipt_discount
+    # 5) receipt_discount / store-specific discount handling
+
+    # hanaro:
+    # item 영역 할인 힌트는 receipt_discount보다 먼저 discount_detail로 잡아야 한다.
+    # 예: "삼겹 한돈자조금 할인 -1,369"
+    if store == "hanaro" and _looks_like_hanaro_body_discount_line(text, store_rules):
+        return "discount_detail"
+
     # 기존 패턴 우선
     if _is_receipt_discount_line(text, store_rules):
         return "receipt_discount"
+
+    # hanaro receipt-level 할인 후보
+    # 예: "끝전할인: -4", "쿠폰할인: -660", "총할인액: -4"
+    if store == "hanaro" and _looks_like_hanaro_receipt_discount_line(text, store_rules):
+        return "receipt_discount"
+
+# emart:
 
     # emart:
     # body 할인 힌트(에누리/행사/S-POINT)는 우선 discount_detail로 둔다.
@@ -616,3 +630,53 @@ def _looks_like_emart_body_discount_line(text: str, store_rules: Any) -> bool:
         return False
 
     return bool(re.search(r"-\s*[\d,]+\s*$", normalized))
+
+
+def _looks_like_hanaro_body_discount_line(text: str, store_rules: Any) -> bool:
+    """
+    hanaro item-level 할인 후보
+
+    예:
+    - 삼겹 한돈자조금 할인 -1,369
+    - 삼겹 한돈자조금 할인 -1.369
+
+    주의:
+    - receipt_discount보다 먼저 검사해야 한다.
+    - "끝전할인", "쿠폰할인", "총할인액"은 영수증 전역 할인으로 처리한다.
+    """
+    normalized = _normalize_space(text)
+
+    # receipt-level 할인 키워드는 제외
+    if _contains_any_keyword(
+        normalized,
+        store_rules.get("receipt_discount_keywords", []),
+    ):
+        return False
+
+    hint_keywords = store_rules.get("body_discount_hint_keywords", [])
+    if not _contains_any_keyword(normalized, hint_keywords):
+        return False
+
+    return bool(re.search(r"-\s*[\d,.]+\s*$", normalized))
+
+
+def _looks_like_hanaro_receipt_discount_line(text: str, store_rules: Any) -> bool:
+    """
+    hanaro receipt-level 할인 후보
+
+    예:
+    - 끝전할인: -4
+    - 끝 전할 인: -1
+    - 쿠폰할인: -660
+    - 총할인액: -4
+    - 농축산물 할인쿠폰 (4월2차) -1,400
+    """
+    normalized = _normalize_space(text)
+
+    if not _contains_any_keyword(
+        normalized,
+        store_rules.get("receipt_discount_keywords", []),
+    ):
+        return False
+
+    return bool(re.search(r"-\s*[\d,.]+\s*$", normalized))
