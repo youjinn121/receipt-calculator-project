@@ -79,6 +79,44 @@ def interpret_receipt(parsed_receipt: Dict[str, Any]) -> Dict[str, Any]:
         if line_type == "discount_detail":
             discount_amount = _safe_int(row.get("discount_raw")) or _safe_int(row.get("price_raw"))
 
+            # ---------------------------------------------------------
+            # hanaro 특수 처리:
+            # [쿠폰] 상품명 + discount_detail 조합은
+            # 상품에 귀속하지 않고 receipt-level discount로 보낸다.
+            #
+            # 예:
+            # 004 [쿠폰]필라이트 500ml 6캔
+            # c8806163190310 -660 1 -660
+            #
+            # 이유:
+            # 하단의 쿠폰할인/총할인액과 중복 차감되는 것을 방지
+            # ---------------------------------------------------------
+            pending_name_text = _clean_text(pending_name) or ""
+            row_text = _clean_text(row.get("line_text")) or ""
+
+            is_coupon_discount_block = (
+                "쿠폰" in pending_name_text
+                or row_text.startswith("c")
+            )
+
+            if is_coupon_discount_block:
+                tail_info["receipt_discounts"].append(
+                    {
+                        "line_idx": line_idx,
+                        "name": pending_name_text or _clean_text(row.get("name_raw")) or row_text,
+                        "code": _clean_text(row.get("code")),
+                        "discount": discount_amount,
+                        "price_raw": _safe_int(row.get("price_raw")),
+                        "source_line_indices": [line_idx] if line_idx is not None else [],
+                        "kind": "coupon_discount_detail_as_receipt_discount",
+                    }
+                )
+
+                # 쿠폰용 pending name은 실제 item이 아니므로 소진
+                pending_name = None
+                pending_name_line_idx = None
+                continue
+
             if last_completed_item_idx is not None and discount_amount is not None and discount_amount > 0:
                 _attach_discount_to_item(
                     item=items[last_completed_item_idx],
