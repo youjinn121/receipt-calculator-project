@@ -266,16 +266,16 @@ def _validate_receipt_totals(
             "reason": "payment_total을 찾지 못했습니다.",
         })
 
-        if item_total is not None:
-            inferred_total = item_total
-            inferred_total_source = "item_total"
-        else:
-            inferred_total = computed_expected_payment_total
-            inferred_total_source = "sum(item.final_price) - receipt_discount_total + fee_total"
+        # 하나로에서 내실금액 라인이 누락된 경우,
+        # 총구매액이 아니라 실제 결제 예상 금액으로 복원한다.
+        inferred_total = computed_expected_payment_total
+        inferred_total_source = "sum(item.final_price) - receipt_discount_total + fee_total"
 
         payment_total = inferred_total
         is_total_inferred = True
         requires_user_total_confirmation = True
+        payment_total_match = None
+
 
         warnings.append({
             "level": "receipt",

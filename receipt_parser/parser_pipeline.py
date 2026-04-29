@@ -282,6 +282,133 @@ def parse_lines(
     return structured_lines
 
 
+def recover_hanaro_split_price_qty_lines(
+    structured_lines: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    hanaro OCR split 복원
+
+    예:
+    007 P청양 700 1
+    *232046 700
+
+    ->
+    item_name: P청양
+    item_detail: code=232046, unit_price=700, qty=1, price_raw=700
+    """
+
+    recovered_lines = [dict(row) for row in structured_lines]
+
+    for idx in range(len(recovered_lines) - 1):
+        current = recovered_lines[idx]
+        next_row = recovered_lines[idx + 1]
+
+        if current.get("line_type") != "item_name":
+            continue
+
+        if next_row.get("line_type") != "item_name":
+            continue
+
+        current_text = str(
+            current.get("normalized_line_text")
+            or current.get("line_text")
+            or ""
+        ).strip()
+
+        next_text = str(
+            next_row.get("normalized_line_text")
+            or next_row.get("line_text")
+            or ""
+        ).strip()
+
+        # 현재 줄: 007 P청양 700 1
+        current_match = re.match(
+            r"^(?P<seq>\d{3})\s+"
+            r"(?P<name>.+?)\s+"
+            r"(?P<unit_price>\d{1,3}(?:,\d{3})*|\d+)\s+"
+            r"(?P<qty>\d+)$",
+            current_text,
+        )
+
+        # 다음 줄: *232046 700 또는 232046 700
+        next_match = re.match(
+            r"^\*?\s*"
+            r"(?P<code>\d{4,13})\s+"
+            r"(?P<price>\d{1,3}(?:,\d{3})*|\d+)$",
+            next_text,
+        )
+
+        if not current_match or not next_match:
+            continue
+
+        name = current_match.group("name").strip()
+        unit_price = _parse_amount(current_match.group("unit_price"))
+        qty = int(current_match.group("qty"))
+        code = next_match.group("code")
+        price = _parse_amount(next_match.group("price"))
+
+        if unit_price is None or price is None:
+            continue
+
+        if unit_price * qty != price:
+            continue
+
+        # 현재 줄은 순수 item_name으로 정리
+        current["name_raw"] = name
+        current["normalized_line_text"] = f"{current_match.group('seq')} {name}"
+        current["is_restored"] = True
+        current["restore_reason"] = "hanaro split item_name detail tokens removed"
+        current["restored_fields"] = _append_restored_fields(
+            current.get("restored_fields", []),
+            ["name_raw", "normalized_line_text"],
+        )
+
+        # 다음 줄은 item_detail로 복원
+        next_row["line_type"] = "item_detail"
+        next_row["code"] = code
+        next_row["qty"] = qty
+        next_row["unit_price_raw"] = unit_price
+        next_row["price_raw"] = price
+        next_row["discount_raw"] = None
+        next_row["name_raw"] = None
+        next_row["is_restored"] = True
+        next_row["restore_reason"] = "hanaro split item_detail recovered from previous item_name"
+        next_row["restored_fields"] = _append_restored_fields(
+            next_row.get("restored_fields", []),
+            ["line_type", "code", "unit_price_raw", "qty", "price_raw"],
+        )
+
+        recovered_lines[idx] = current
+        recovered_lines[idx + 1] = next_row
+
+    return recovered_lines
+
+
+def _parse_amount(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+
+    text = str(value).strip().replace(",", "").replace(".", "")
+
+    if not text.isdigit():
+        return None
+
+    return int(text)
+
+
+def _append_restored_fields(
+    current: List[str],
+    fields: List[str],
+) -> List[str]:
+    result = list(current or [])
+
+    for field in fields:
+        if field not in result:
+            result.append(field)
+
+    return result
+
+
 def resolve_store(
     receipt: Dict[str, Any],
     store: Optional[str] = None,
@@ -339,12 +466,16 @@ def parse_receipt(
         store_rules=store_rules,
     )
 
+    if resolved_store == "hanaro":
+        structured_lines = recover_hanaro_split_price_qty_lines(structured_lines)
+
     return {
         "file_name": receipt.get("file_name", ""),
         "file_meta": receipt.get("file_meta", {}),
         "store": resolved_store,
         "lines": structured_lines,
     }
+
 
 
 def trim_lines_before_end_section(
