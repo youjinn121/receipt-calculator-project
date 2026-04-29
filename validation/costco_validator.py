@@ -58,6 +58,10 @@ def validate_costco(semantic_receipt: Dict[str, Any]) -> Dict[str, Any]:
         "file_name": semantic_receipt.get("file_name", ""),
         "file_meta": semantic_receipt.get("file_meta", {}),
         "store": "costco",
+        "is_total_inferred": receipt_result["is_total_inferred"],
+        "inferred_total": receipt_result["inferred_total"],
+        "inferred_total_source": receipt_result["inferred_total_source"],
+        "requires_user_total_confirmation": receipt_result["requires_user_total_confirmation"],
         "is_valid": len(errors) == 0,
         "recapture_recommended": recapture_info["recapture_recommended"],
         "recapture_reasons": recapture_info["reasons"],
@@ -79,6 +83,10 @@ def validate_costco(semantic_receipt: Dict[str, Any]) -> Dict[str, Any]:
                 "item_qty_sum": receipt_result["item_qty_sum"],
                 "subtotal_count_sum": receipt_result["subtotal_count_sum"],
                 "subtotal_count_match": receipt_result["subtotal_count_match"],
+                "is_total_inferred": receipt_result["is_total_inferred"],
+                "inferred_total": receipt_result["inferred_total"],
+                "inferred_total_source": receipt_result["inferred_total_source"],
+                "requires_user_total_confirmation": receipt_result["requires_user_total_confirmation"],
             },
             "subtotal_segment_results": receipt_result["subtotal_segment_results"],
             "recapture_decision": {
@@ -197,11 +205,34 @@ def _validate_receipt_totals(
 
     total_match: Optional[bool] = None
 
+    is_total_inferred = False
+    inferred_total: Optional[int] = None
+    inferred_total_source: Optional[str] = None
+    requires_user_total_confirmation = False
+
     if receipt_total is None:
         warnings.append({
             "level": "receipt",
-            "reason": "receipt total을 찾지 못했습니다.",
+            "reason": "receipt_total을 찾지 못했습니다.",
         })
+
+        inferred_total = computed_final_price_sum
+        inferred_total_source = "sum(item.final_price)"
+
+        receipt_total = inferred_total
+        receipt_total_source = f"inferred:{inferred_total_source}"
+
+        is_total_inferred = True
+        requires_user_total_confirmation = True
+        total_match = None
+
+        warnings.append({
+            "level": "receipt",
+            "reason": "receipt_total이 없어 임시 total을 생성했습니다. 사용자 확인이 필요합니다.",
+            "inferred_total": inferred_total,
+            "inferred_total_source": inferred_total_source,
+        })
+
     else:
         total_match = (computed_final_price_sum == receipt_total)
 
@@ -250,7 +281,6 @@ def _validate_receipt_totals(
             segment.get("match") is True
             for segment in subtotal_segment_results
         )
-
         for segment in subtotal_segment_results:
             if not segment.get("match"):
                 warnings.append({
@@ -278,6 +308,10 @@ def _validate_receipt_totals(
         "subtotal_segment_match": subtotal_segment_match,
         "subtotal_segment_results": subtotal_segment_results,
         "errors": errors,
+        "is_total_inferred": is_total_inferred,
+        "inferred_total": inferred_total,
+        "inferred_total_source": inferred_total_source,
+        "requires_user_total_confirmation": requires_user_total_confirmation,
         "warnings": warnings,
     }
 
@@ -504,6 +538,15 @@ def _build_recapture_decision(
     )
     if has_item_price_mismatch:
         reasons.append("item_price_mismatch")
+
+    has_missing_receipt_total = any(
+        warn.get("level") == "receipt"
+        and warn.get("reason") == "receipt_total을 찾지 못했습니다."
+        for warn in warnings
+    )
+
+    if has_missing_receipt_total:
+        reasons.append("receipt_total_missing")
 
     trigger_count = len(reasons)
 
