@@ -125,6 +125,22 @@ def token_match_count(line_text: str, token_group: List[str], sim_threshold: flo
 def line_to_plain_text(line: List[Dict[str, Any]]) -> str:
     return " ".join([w["text"] for w in sorted(line, key=lambda x: x["xmin"])])
 
+def line_tokens_to_text(line: List[Dict[str, Any]]) -> str:
+    if not line:
+        return ""
+
+    return line_to_plain_text(line).strip()
+
+
+def convert_lines_to_plain_text(lines: List[List[Dict[str, Any]]]) -> List[str]:
+    result: List[str] = []
+
+    for line in lines:
+        text = line_tokens_to_text(line)
+        if text:
+            result.append(text)
+
+    return result
 
 def point_line_distance(point: Dict[str, Any], slope: float, intercept: float) -> float:
     denom = math.sqrt(slope ** 2 + 1)
@@ -966,15 +982,19 @@ def merge_receipts_by_page_order(
 
 def get_end_section_priority(text):
     text = normalize_text(text)
-
-    if text.startswith(normalize_text("합계")):
+    
+    if text.startswith(normalize_text("결제대상금액")):
         return 1
-    if text.startswith(normalize_text("부가세")):
+    if text.startswith(normalize_text("제대상금액")):
+        return 1
+    if text.startswith(normalize_text("합계")):
         return 2
-    if text.startswith(normalize_text("과세")):
+    if text.startswith(normalize_text("부가세")):
         return 3
-    if text.startswith(normalize_text("면세")):
+    if text.startswith(normalize_text("과세")):
         return 4
+    if text.startswith(normalize_text("면세")):
+        return 5
 
     return None
 
@@ -1091,4 +1111,10 @@ def run_line_sorting_for_single_receipt_pages(
     )
 
     trimmed_list = trim_receipt_body([merged_receipt])
-    return trimmed_list[0]
+    result = trimmed_list[0]
+    
+    result["lines_raw_tokens"] = result.get("lines", [])
+    
+    result["lines"] = convert_lines_to_plain_text(result.get("lines", []))
+    
+    return result

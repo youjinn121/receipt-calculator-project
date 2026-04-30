@@ -1,4 +1,6 @@
 import json
+import os
+from typing import Any, Dict
 
 from sqlalchemy.orm import Session, selectinload
 
@@ -6,8 +8,128 @@ from backend.app.models.receipt.receipt import Receipt
 from backend.app.models.receipt.receipt_item import ReceiptItem
 from backend.app.models.receipt.receipt_line import ReceiptLine
 from backend.app.models.receipt.receipt_validation import ReceiptValidation
-from parser import run_line_sorting_for_single_receipt_pages
-from run_pipeline import run_receipt_pipeline
+from line_sorting import run_line_sorting_for_single_receipt_pages
+from pipeline_runner import run_receipt_pipeline
+
+
+def _build_empty_analysis() -> Dict[str, Any]:
+    return {
+        "category_summary": {
+            "categorized_item_count": None,
+            "uncategorized_item_count": None,
+            "categorization_rate": None,
+        },
+        "basket_metrics": {
+            "guilty_pleasure_index": None,
+            "home_cooking_ratio": None,
+            "impulse_buy_factor": None,
+            "basket_variety_score": None,
+        },
+    }
+
+
+def _build_receipt_summary(
+    semantic_result: Dict[str, Any],
+    validation_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    tail_summary = (semantic_result.get("tail_info") or {}).get("summary", {}) or {}
+    debug_receipt = (validation_result.get("debug") or {}).get("receipt_validation", {}) or {}
+
+    item_total = tail_summary.get("item_total")
+    payment_total = tail_summary.get("payment_total")
+
+    if item_total is None:
+        item_total = debug_receipt.get("item_total")
+
+    if payment_total is None:
+        payment_total = (
+            debug_receipt.get("payment_total")
+            or debug_receipt.get("receipt_total")
+            or validation_result.get("inferred_total")
+        )
+
+    return {
+        "item_total": item_total,
+        "payment_total": payment_total,
+        "receipt_discount_total": tail_summary.get("receipt_discount_total"),
+        "fee_total": tail_summary.get("fee_total"),
+        "is_total_inferred": validation_result.get(
+            "is_total_inferred",
+            debug_receipt.get("is_total_inferred", False),
+        ),
+        "inferred_total": validation_result.get(
+            "inferred_total",
+            debug_receipt.get("inferred_total"),
+        ),
+        "inferred_total_source": validation_result.get(
+            "inferred_total_source",
+            debug_receipt.get("inferred_total_source"),
+        ),
+        "requires_user_total_confirmation": validation_result.get(
+            "requires_user_total_confirmation",
+            debug_receipt.get("requires_user_total_confirmation", False),
+        ),
+    }
+
+
+def _build_final_output(
+    *,
+    parsed_result: Dict[str, Any],
+    semantic_result: Dict[str, Any],
+    validation_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    analysis = semantic_result.get("analysis")
+    if not isinstance(analysis, dict):
+        analysis = _build_empty_analysis()
+    else:
+        analysis = {
+            "category_summary": {
+                "categorized_item_count": (analysis.get("category_summary") or {}).get("categorized_item_count"),
+                "uncategorized_item_count": (analysis.get("category_summary") or {}).get("uncategorized_item_count"),
+                "categorization_rate": (analysis.get("category_summary") or {}).get("categorization_rate"),
+            },
+            "basket_metrics": {
+                "guilty_pleasure_index": (analysis.get("basket_metrics") or {}).get("guilty_pleasure_index"),
+                "home_cooking_ratio": (analysis.get("basket_metrics") or {}).get("home_cooking_ratio"),
+                "impulse_buy_factor": (analysis.get("basket_metrics") or {}).get("impulse_buy_factor"),
+                "basket_variety_score": (analysis.get("basket_metrics") or {}).get("basket_variety_score"),
+            },
+        }
+
+    return {
+        "file_name": parsed_result.get("file_name", ""),
+        "file_meta": parsed_result.get("file_meta", {}),
+        "store": semantic_result.get("store") or parsed_result.get("store", ""),
+        "receipt": _build_receipt_summary(
+            semantic_result=semantic_result,
+            validation_result=validation_result,
+        ),
+        "items": semantic_result.get("items", []),
+        "tail_info": semantic_result.get("tail_info", {}),
+        "validation": validation_result,
+        "lines": parsed_result.get("lines", []),
+        "analysis": analysis,
+    }
+
+
+def _build_final_output_path(receipt_id: int) -> str:
+    return os.path.join(
+        "backend",
+        "storage",
+        "receipts",
+        str(receipt_id),
+        "final_output.json",
+    )
+
+
+def _save_final_output_json(receipt_id: int, final_output: Dict[str, Any]) -> str:
+    output_path = _build_final_output_path(receipt_id)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(final_output, f, ensure_ascii=False, indent=2)
+
+    return output_path
 
 
 def _clear_previous_pipeline_result(db: Session, receipt: Receipt) -> None:
@@ -19,27 +141,22 @@ def _clear_previous_pipeline_result(db: Session, receipt: Receipt) -> None:
 
 def _update_receipt_row(
     receipt: Receipt,
-    parsed_result: dict,
-    semantic_result: dict,
-    validation_result: dict,
+    final_output: dict,
 ) -> None:
-    receipt_summary = semantic_result.get("receipt") or {}
-    if not receipt_summary:
-        receipt_summary = (semantic_result.get("tail_info") or {}).get("summary", {})
+    receipt_summary = final_output.get("receipt", {})
+    validation = final_output.get("validation", {})
 
-    debug_receipt = (validation_result.get("debug") or {}).get("receipt_validation", {})
-
-    receipt.file_name = parsed_result.get("file_name") or receipt.file_name
-    receipt.store = semantic_result.get("store") or receipt.store
+    receipt.file_name = final_output.get("file_name") or receipt.file_name
+    receipt.store = final_output.get("store") or receipt.store
 
     receipt.item_total = receipt_summary.get("item_total")
     receipt.payment_total = receipt_summary.get("payment_total")
     receipt.receipt_discount_total = receipt_summary.get("receipt_discount_total")
     receipt.fee_total = receipt_summary.get("fee_total")
 
-    receipt.is_valid = validation_result.get("is_valid", False)
-    receipt.is_total_inferred = debug_receipt.get("is_total_inferred", False)
-    receipt.requires_user_total_confirmation = debug_receipt.get(
+    receipt.is_valid = validation.get("is_valid", False)
+    receipt.is_total_inferred = receipt_summary.get("is_total_inferred", False)
+    receipt.requires_user_total_confirmation = receipt_summary.get(
         "requires_user_total_confirmation",
         False,
     )
@@ -47,8 +164,8 @@ def _update_receipt_row(
     receipt.status = "pipeline_completed"
 
 
-def _save_receipt_lines(db: Session, receipt_id: int, parsed_result: dict) -> None:
-    for line in parsed_result.get("lines", []):
+def _save_receipt_lines(db: Session, receipt_id: int, final_output: dict) -> None:
+    for line in final_output.get("lines", []):
         row = ReceiptLine(
             receipt_id=receipt_id,
             line_idx=line.get("line_idx"),
@@ -63,8 +180,8 @@ def _save_receipt_lines(db: Session, receipt_id: int, parsed_result: dict) -> No
         db.add(row)
 
 
-def _save_receipt_items(db: Session, receipt_id: int, semantic_result: dict) -> None:
-    for item in semantic_result.get("items", []):
+def _save_receipt_items(db: Session, receipt_id: int, final_output: dict) -> None:
+    for item in final_output.get("items", []):
         row = ReceiptItem(
             receipt_id=receipt_id,
             name=item.get("name") or "",
@@ -85,12 +202,12 @@ def _save_receipt_items(db: Session, receipt_id: int, semantic_result: dict) -> 
 def _save_receipt_validation(
     db: Session,
     receipt_id: int,
-    semantic_result: dict,
-    validation_result: dict,
+    final_output: dict,
 ) -> None:
-    category_summary = (semantic_result.get("analysis") or {}).get("category_summary", {})
-    item_validation = validation_result.get("item_validation", {})
-    receipt_validation = validation_result.get("receipt_validation", {})
+    validation = final_output.get("validation", {})
+    item_validation = validation.get("item_validation", {})
+    receipt_validation = validation.get("receipt_validation", {})
+    category_summary = (final_output.get("analysis") or {}).get("category_summary", {})
 
     row = ReceiptValidation(
         receipt_id=receipt_id,
@@ -100,8 +217,8 @@ def _save_receipt_validation(
         total_match=receipt_validation.get("total_match"),
         subtotal_segment_match=receipt_validation.get("subtotal_segment_match"),
         categorization_rate=category_summary.get("categorization_rate"),
-        error_count=len(validation_result.get("errors", [])),
-        warning_count=len(validation_result.get("warnings", [])),
+        error_count=len(validation.get("errors", [])),
+        warning_count=len(validation.get("warnings", [])),
     )
     db.add(row)
 
@@ -161,32 +278,40 @@ def run_pipeline_for_receipt(db: Session, receipt_id: int) -> dict:
     semantic_result = pipeline_result["semantic"]
     validation_result = pipeline_result["validation"]
 
+    final_output = _build_final_output(
+        parsed_result=parsed_result,
+        semantic_result=semantic_result,
+        validation_result=validation_result,
+    )
+
+    final_output_path = _save_final_output_json(
+        receipt_id=receipt.id,
+        final_output=final_output,
+    )
+
     _clear_previous_pipeline_result(db=db, receipt=receipt)
 
     _update_receipt_row(
         receipt=receipt,
-        parsed_result=parsed_result,
-        semantic_result=semantic_result,
-        validation_result=validation_result,
+        final_output=final_output,
     )
 
     _save_receipt_lines(
         db=db,
         receipt_id=receipt.id,
-        parsed_result=parsed_result,
+        final_output=final_output,
     )
 
     _save_receipt_items(
         db=db,
         receipt_id=receipt.id,
-        semantic_result=semantic_result,
+        final_output=final_output,
     )
 
     _save_receipt_validation(
         db=db,
         receipt_id=receipt.id,
-        semantic_result=semantic_result,
-        validation_result=validation_result,
+        final_output=final_output,
     )
 
     db.add(receipt)
