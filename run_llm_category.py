@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from llm.category_manager import categorize_receipt_items
@@ -7,7 +8,22 @@ from llm.category_manager import categorize_receipt_items
 INPUT_ROOT = Path("data/semantic")
 OUTPUT_ROOT = Path("data/categorized")
 
-STORES = ["costco", "emart", "hanaro"]
+# 코드 수정 반영 확인 대상만 실행
+TARGET_FILES = {
+    "costco": [
+        "004_costco.json",  # 오뚜기 순 후 추
+        "020_costco.json",  # 워터보일드베이글
+    ],
+    "emart": [
+        "035_emart.json",  # 스테비아, 슈가버블 문맥
+        "044_emart.json",  # 드립백 확인
+    ],
+    "hanaro": [
+        "053_hanaro.json",  # 빙그레요구르트
+    ],
+}
+USE_CACHE = False
+SAVE_CACHE = False
 
 
 def load_json(path: Path):
@@ -17,12 +33,11 @@ def load_json(path: Path):
 
 def save_json(data, path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
-
     with path.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def categorize_store(store: str, limit: int | None = None):
+def categorize_store(store: str, file_names: list[str]):
     input_dir = INPUT_ROOT / store
     output_dir = OUTPUT_ROOT / store
 
@@ -30,20 +45,23 @@ def categorize_store(store: str, limit: int | None = None):
         print(f"[SKIP] {input_dir} 없음")
         return
 
-    files = sorted(input_dir.glob("*.json"))
+    print(f"\n[{store}] {len(file_names)}개 처리 시작")
 
-    if limit is not None:
-        files = files[:limit]
+    for file_name in file_names:
+        path = input_dir / file_name
 
-    print(f"\n[{store}] {len(files)}개 처리 시작")
+        if not path.exists():
+            print(f"[SKIP] {path} 없음")
+            continue
 
-    for path in files:
         semantic = load_json(path)
 
         categorized = categorize_receipt_items(
             semantic_receipt=semantic,
             use_llm=True,
-            use_fallback=False,  # 평가용: fallback 끔
+            use_fallback=False,
+            use_cache=USE_CACHE,
+            save_cache=SAVE_CACHE,
         )
 
         output_path = output_dir / path.name
@@ -60,9 +78,8 @@ def categorize_store(store: str, limit: int | None = None):
 
 
 def main():
-    # 처음에는 과금 방지용으로 매장별 2개만
-    for store in STORES:
-        categorize_store(store, limit=2)
+    for store, file_names in TARGET_FILES.items():
+        categorize_store(store, file_names)
 
 
 if __name__ == "__main__":

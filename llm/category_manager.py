@@ -26,15 +26,30 @@ from llm.llm_client import call_llm
 from llm.response_parser import parse_category_response
 from llm.fallback_rules import apply_fallback_category
 from llm.metrics import attach_category_metrics
+from llm.cache import (
+    get_cached_category,
+    load_category_cache,
+    save_category_cache,
+    set_cached_category,
+)
 
 def categorize_receipt_items(
     semantic_receipt: Dict[str, Any],
     model: Optional[str] = None,
     use_llm: bool = True,
     use_fallback: bool = False,
+    use_cache: bool = True,
+    save_cache: bool = True,
+    cache_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     semantic receipt의 items에 category 필드를 추가한다.
+
+    처리 우선순위:
+    1. fallback 사용 시 fallback rule
+    2. cache 사용 시 cached category
+    3. LLM 호출
+    4. 실패/비허용 응답은 Uncategorized
     """
 
     result = dict(semantic_receipt)
@@ -47,13 +62,20 @@ def categorize_receipt_items(
         if str(item.get("name", "")).strip()
     ]
 
+    cache = load_category_cache(cache_path) if cache_path else load_category_cache()
+
     categorized_items: List[Dict[str, Any]] = []
+    cache_updated = False
 
     for item in items:
+        item_name = str(item.get("name") or "").strip()
+
         category = "Uncategorized"
         raw_response = None
         method = "disabled"
+        cache_hit = False
 
+        # 1) fallback rule
         if use_fallback:
             fallback_category = apply_fallback_category(item)
 
@@ -61,6 +83,21 @@ def categorize_receipt_items(
                 category = fallback_category
                 method = "fallback"
 
+        # 2) cache lookup
+        if category == "Uncategorized" and use_cache and item_name:
+            cached = get_cached_category(
+                cache=cache,
+                store=store,
+                item_name=item_name,
+            )
+
+            if cached:
+                category = cached["category"]
+                method = "cache"
+                raw_response = cached.get("category_meta", {}).get("raw_response")
+                cache_hit = True
+
+        # 3) LLM call
         if category == "Uncategorized" and use_llm:
             prompt = build_category_prompt(
                 item=item,
@@ -76,6 +113,17 @@ def categorize_receipt_items(
             category = parse_category_response(raw_response)
             method = "llm"
 
+            if save_cache and item_name:
+                set_cached_category(
+                    cache=cache,
+                    store=store,
+                    item_name=item_name,
+                    category=category,
+                    raw_response=raw_response,
+                    method="llm",
+                )
+                cache_updated = True
+
         item["category"] = category
         item["category_meta"] = {
             "method": method,
@@ -83,9 +131,17 @@ def categorize_receipt_items(
             "allowed_categories": PRIMARY_CATEGORIES,
             "use_fallback": use_fallback,
             "use_llm": use_llm,
+            "use_cache": use_cache,
+            "cache_hit": cache_hit,
         }
 
         categorized_items.append(item)
+
+    if cache_updated:
+        if cache_path:
+            save_category_cache(cache, cache_path)
+        else:
+            save_category_cache(cache)
 
     result["items"] = categorized_items
     result["category_summary"] = build_category_summary(categorized_items)
@@ -131,6 +187,9 @@ def categorize_items_only(
     model: Optional[str] = None,
     use_llm: bool = True,
     use_fallback: bool = False,
+    use_cache: bool = True,
+    save_cache: bool = True,
+    cache_path: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     receipt 전체가 아니라 items 리스트만 분류할 때 사용.
@@ -146,7 +205,10 @@ def categorize_items_only(
         model=model,
         use_llm=use_llm,
         use_fallback=use_fallback,
-    )
+        use_cache=use_cache,
+        save_cache=save_cache,
+        cache_path=cache_path,
+)
 
     return result.get("items", [])
 

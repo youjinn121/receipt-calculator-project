@@ -48,10 +48,11 @@ def build_category_metrics(categorized_receipt: Dict[str, Any]) -> Dict[str, Any
     evaluated_items = 0
 
     method_counts = {
-        "fallback": 0,
-        "llm": 0,
-        "disabled": 0,
-        "unknown": 0,
+            "fallback": 0,
+            "llm": 0,
+            "cache": 0,
+            "disabled": 0,
+            "unknown": 0,
     }
 
     category_counts = _init_category_count_map()
@@ -132,10 +133,11 @@ def build_category_metrics_for_many(
     total_final_price = 0
 
     method_counts = {
-        "fallback": 0,
-        "llm": 0,
-        "disabled": 0,
-        "unknown": 0,
+            "fallback": 0,
+            "llm": 0,
+            "cache": 0,
+            "disabled": 0,
+            "unknown": 0,
     }
 
     category_counts = _init_category_count_map()
