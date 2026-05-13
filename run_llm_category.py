@@ -8,22 +8,15 @@ from llm.category_manager import categorize_receipt_items
 INPUT_ROOT = Path("data/semantic")
 OUTPUT_ROOT = Path("data/categorized")
 
-# 코드 수정 반영 확인 대상만 실행
-TARGET_FILES = {
-    "costco": [
-        "004_costco.json",  # 오뚜기 순 후 추
-        "020_costco.json",  # 워터보일드베이글
-    ],
-    "emart": [
-        "035_emart.json",  # 스테비아, 슈가버블 문맥
-        "044_emart.json",  # 드립백 확인
-    ],
-    "hanaro": [
-        "053_hanaro.json",  # 빙그레요구르트
-    ],
+# 오분류 수정 반영 대상만 실행
+TARGET_RANGES = {
+    ##"costco": [24],
+    "emart": [39],
+    ##"hanaro": [47, 49, 61],
 }
-USE_CACHE = False
-SAVE_CACHE = False
+
+USE_CACHE = True
+SAVE_CACHE = True
 
 
 def load_json(path: Path):
@@ -33,53 +26,92 @@ def load_json(path: Path):
 
 def save_json(data, path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
+
     with path.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def categorize_store(store: str, file_names: list[str]):
+def extract_receipt_no(path: Path) -> int | None:
+    """
+    예:
+    - 006_costco.json -> 6
+    - 035_emart.json -> 35
+    - 061_hanaro.json -> 61
+    """
+
+    match = re.match(r"^(\d+)_", path.name)
+
+    if not match:
+        return None
+
+    return int(match.group(1))
+
+
+def categorize_store(store: str, target_numbers: list[int]):
     input_dir = INPUT_ROOT / store
     output_dir = OUTPUT_ROOT / store
 
     if not input_dir.exists():
-        print(f"[SKIP] {input_dir} 없음")
+        print(f"[SKIP] input dir 없음: {input_dir}")
         return
 
-    print(f"\n[{store}] {len(file_names)}개 처리 시작")
+    files = sorted(input_dir.glob("*.json"))
 
-    for file_name in file_names:
-        path = input_dir / file_name
+    target_files = []
 
-        if not path.exists():
-            print(f"[SKIP] {path} 없음")
-            continue
+    for file_path in files:
+        receipt_no = extract_receipt_no(file_path)
 
-        semantic = load_json(path)
+        if receipt_no in target_numbers:
+            target_files.append(file_path)
 
-        categorized = categorize_receipt_items(
-            semantic_receipt=semantic,
-            use_llm=True,
-            use_fallback=False,
+    print(f"\n[{store}] {len(target_files)}개 처리 시작")
+
+    for file_path in target_files:
+        semantic_receipt = load_json(file_path)
+
+        categorized_receipt = categorize_receipt_items(
+            semantic_receipt=semantic_receipt,
             use_cache=USE_CACHE,
             save_cache=SAVE_CACHE,
         )
 
-        output_path = output_dir / path.name
-        save_json(categorized, output_path)
+        output_path = output_dir / file_path.name
 
-        metrics = categorized.get("category_metrics", {})
+        save_json(categorized_receipt, output_path)
+
+        items = categorized_receipt.get("items", [])
+
+        total_items = len(items)
+
+        uncategorized_count = sum(
+            1
+            for item in items
+            if item.get("category") in (None, "", "Uncategorized")
+        )
+
+        coverage = (
+            0.0
+            if total_items == 0
+            else round(
+                (total_items - uncategorized_count)
+                / total_items
+                * 100,
+                1,
+            )
+        )
 
         print(
-            f"[OK] {path.name} "
-            f"| items={metrics.get('total_items')} "
-            f"| coverage={metrics.get('coverage_rate')}% "
-            f"| uncategorized={metrics.get('uncategorized_items')}"
+            f"[OK] {file_path.name} | "
+            f"items={total_items} | "
+            f"coverage={coverage}% | "
+            f"uncategorized={uncategorized_count}"
         )
 
 
 def main():
-    for store, file_names in TARGET_FILES.items():
-        categorize_store(store, file_names)
+    for store, target_numbers in TARGET_RANGES.items():
+        categorize_store(store, target_numbers)
 
 
 if __name__ == "__main__":
