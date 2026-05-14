@@ -1,8 +1,8 @@
 {
   "summary": {
-    "total_diffs": 38,
+    "total_diffs": 36,
     "policy_change_pet_to_etc": 0,
-    "core_category_changed": 37,
+    "core_category_changed": 35,
     "support_category_changed": 1,
     "added_item": 0,
     "removed_item": 0,
@@ -390,7 +390,7 @@
       "file": "hanaro\\067_hanaro.json",
       "type": "core_category_changed",
       "item_index": 0,
-      "name": "P미니비엔나 140",
+      "name": "미니비엔나 140",
       "qty": 2,
       "base_price": 5240,
       "final_price": 5240,
@@ -403,7 +403,7 @@
       "file": "hanaro\\067_hanaro.json",
       "type": "core_category_changed",
       "item_index": 2,
-      "name": "P맥스봉 갈릭비엔나 70g",
+      "name": "맥스봉 갈릭비엔나 70g",
       "qty": 2,
       "base_price": 2000,
       "final_price": 2000,
@@ -411,19 +411,6 @@
       "after_category": "식재료",
       "before_category_normalized": "간편식",
       "after_category_normalized": "식재료"
-    },
-    {
-      "file": "hanaro\\067_hanaro.json",
-      "type": "core_category_changed",
-      "item_index": 5,
-      "name": "P테라(페트) 1L 1L",
-      "qty": 1,
-      "base_price": 2640,
-      "final_price": 2640,
-      "before_category": "주류",
-      "after_category": "음료",
-      "before_category_normalized": "주류",
-      "after_category_normalized": "음료"
     },
     {
       "file": "hanaro\\069_hanaro.json",
@@ -437,19 +424,6 @@
       "after_category": "음료",
       "before_category_normalized": "식재료",
       "after_category_normalized": "음료"
-    },
-    {
-      "file": "hanaro\\072_hanaro.json",
-      "type": "core_category_changed",
-      "item_index": 0,
-      "name": "삼립) 천연효모로만밀식빵 420g 420g",
-      "qty": 2,
-      "base_price": 5960,
-      "final_price": 5960,
-      "before_category": "식재료",
-      "after_category": "간식",
-      "before_category_normalized": "식재료",
-      "after_category_normalized": "간식"
     },
     {
       "file": "hanaro\\074_hanaro.json",

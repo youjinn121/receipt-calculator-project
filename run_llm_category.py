@@ -12,9 +12,9 @@ USE_CACHE = False
 SAVE_CACHE = False
 
 TARGET_RANGES = {
-    "costco": [13],
+    "hanaro": [67],
+    ##"costco": [13, 20],
 }
-
 
 def load_json(path: Path):
     with path.open("r", encoding="utf-8") as f:
