@@ -62,6 +62,12 @@ LEADING_ITEM_NO_RE = re.compile(r"^\d{2,3}\*?\s+")
 LEADING_BRACKET_PREFIX_RE = re.compile(r"^\([A-Za-z]{1,3}\)")
 LEADING_BRACKET_TAG_RE = re.compile(r"^\[[^\]]+\]\s*")
 
+# Hanaro 상품명 앞 P 접두어 제거용
+# 예) P과일 -> 과일, P서울우유 -> 서울우유, P삼립) ... -> 삼립) ...
+# 단, PEPSI처럼 실제 영문 상품명이 P로 시작하는 경우는 제거하지 않도록
+# P 뒤가 한글 또는 숫자인 경우만 제거한다.
+HANARO_LEADING_P_PREFIX_RE = re.compile(r"^P\s*(?=[가-힣0-9])")
+
 # emart OCR noise:
 # 예) "100 %1,590", "50 %2,980"
 # 금액 토큰 바로 앞에 끼어든 숫자+% 노이즈 제거용
@@ -179,6 +185,12 @@ def cleanup_name_candidate(text: str, store: str, store_rules: object | None = N
     # ex) (J)무항생제볶음탕용 / (Ph)돌바나나(송이)
     if store_norm == "emart":
         out = LEADING_BRACKET_PREFIX_RE.sub("", out).strip()
+
+    # hanaro 상품명 앞 P 접두어 제거
+    # ex) P과일 -> 과일 / P서울우유 -> 서울우유 / P삼립) ... -> 삼립) ...
+    # 상품명 후보에만 적용하고, line 전체 normalize에는 적용하지 않는다.
+    if store_norm == "hanaro":
+        out = HANARO_LEADING_P_PREFIX_RE.sub("", out).strip()
 
     # store_rules의 name_cleanup_patterns 적용
     if store_rules:

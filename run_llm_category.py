@@ -8,15 +8,12 @@ from llm.category_manager import categorize_receipt_items
 INPUT_ROOT = Path("data/semantic")
 OUTPUT_ROOT = Path("data/categorized")
 
-# 오분류 수정 반영 대상만 실행
-TARGET_RANGES = {
-    ##"costco": [24],
-    "emart": [39],
-    ##"hanaro": [47, 49, 61],
-}
+USE_CACHE = False
+SAVE_CACHE = False
 
-USE_CACHE = True
-SAVE_CACHE = True
+TARGET_RANGES = {
+    "costco": [13],
+}
 
 
 def load_json(path: Path):
