@@ -225,3 +225,5 @@ backend/storage/
 
 # OCR 결과
 *.ocr.json
+# Local evaluation backups
+backup/
