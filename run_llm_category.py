@@ -14,8 +14,8 @@ SAVE_CACHE = False
 
 # validation is_valid=True인 파일만 처리됨
 TARGET_RANGES = {
-    "costco": (1, 37),
-    "hanaro": (38, 76),
+    #"costco": (1, 37),
+    #"hanaro": (38, 76),
     "emart": (77, 100),
 }
 

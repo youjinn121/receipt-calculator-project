@@ -69,9 +69,12 @@ def interpret_receipt(parsed_receipt: Dict[str, Any]) -> Dict[str, Any]:
         # ---------------------------------------------------------
         if line_type == "item_name":
             name_raw = _clean_text(row.get("name_raw")) or _clean_text(row.get("line_text"))
-            if name_raw:
+
+            # 이마트 표 헤더가 item_name으로 들어온 경우 방어적으로 무시
+            if name_raw and not _is_header_like_name(name_raw):
                 pending_name = name_raw
                 pending_name_line_idx = line_idx
+
             continue
 
         # ---------------------------------------------------------
@@ -329,15 +332,22 @@ def _build_item_from_detail_row(
     price_raw = _safe_int(row.get("price_raw"))
     detail_name = _clean_text(row.get("name_raw"))
 
+    # 헤더성 pending_name은 버림
+    if _is_header_like_name(pending_name):
+        pending_name = None
+        pending_name_line_idx = None
+
     # 이름 결정 우선순위
-    if pending_name:
-        name = pending_name
-        name_source = "item_name+item_detail"
-        source_line_indices = [idx for idx in [pending_name_line_idx, line_idx] if idx is not None]
-    elif detail_name:
+    # emart는 "상품명 + 단가 + 수량 + 금액"이 한 줄에 같이 있는 inline item_detail이 많으므로
+    # item_detail의 name_raw가 있으면 그 값을 우선한다.
+    if detail_name:
         name = detail_name
         name_source = "item_detail_inline_name"
         source_line_indices = [line_idx] if line_idx is not None else []
+    elif pending_name:
+        name = pending_name
+        name_source = "item_name+item_detail"
+        source_line_indices = [idx for idx in [pending_name_line_idx, line_idx] if idx is not None]
     elif code:
         name = code
         name_source = "item_detail_code_fallback"
@@ -475,6 +485,16 @@ def _normalize_text(value: Any) -> str:
     if value is None:
         return ""
     return "".join(str(value).strip().split())
+
+
+def _is_header_like_name(value: Any) -> bool:
+    text = _normalize_text(value)
+
+    return text in {
+        "상품명단가수량금액",
+        "상품코드단가수량금액",
+        "단가수량금액",
+    }
 
 
 def _safe_int(value: Any) -> Optional[int]:

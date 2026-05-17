@@ -5071,14 +5071,14 @@
     "receipt_file": "078_emart.json",
     "item_name": "오뚜기 프레스코 미트",
     "gt_category": "기타",
-    "pred_category": "기타",
+    "pred_category": "식재료",
     "label_confidence": "unknown",
     "allowed_categories": [
       "기타",
       "식재료",
       "간편식"
     ],
-    "exact_match": true,
+    "exact_match": false,
     "allowed_match": true,
     "missing_pred": false
   },
@@ -5145,14 +5145,14 @@
     "receipt_file": "080_emart.json",
     "item_name": "노브랜드 교자만두",
     "gt_category": "간편식",
-    "pred_category": null,
+    "pred_category": "간편식",
     "label_confidence": "clear",
     "allowed_categories": [
       "간편식"
     ],
-    "exact_match": false,
-    "allowed_match": false,
-    "missing_pred": true
+    "exact_match": true,
+    "allowed_match": true,
+    "missing_pred": false
   },
   {
     "store": "emart",
@@ -5202,28 +5202,28 @@
     "receipt_file": "081_emart.json",
     "item_name": "국내산삼겹살구이",
     "gt_category": "식재료",
-    "pred_category": null,
+    "pred_category": "식재료",
     "label_confidence": "clear",
     "allowed_categories": [
       "식재료"
     ],
-    "exact_match": false,
-    "allowed_match": false,
-    "missing_pred": true
+    "exact_match": true,
+    "allowed_match": true,
+    "missing_pred": false
   },
   {
     "store": "emart",
     "receipt_file": "082_emart.json",
     "item_name": "종량제봉투20L_NBFC강",
     "gt_category": "생활용품",
-    "pred_category": null,
+    "pred_category": "생활용품",
     "label_confidence": "clear",
     "allowed_categories": [
       "생활용품"
     ],
-    "exact_match": false,
-    "allowed_match": false,
-    "missing_pred": true
+    "exact_match": true,
+    "allowed_match": true,
+    "missing_pred": false
   },
   {
     "store": "emart",
@@ -5316,15 +5316,15 @@
     "receipt_file": "083_emart.json",
     "item_name": "오리온 통크 초코 4",
     "gt_category": "간식",
-    "pred_category": null,
+    "pred_category": "간식",
     "label_confidence": "ambiguous",
     "allowed_categories": [
       "간식",
       "기타"
     ],
-    "exact_match": false,
-    "allowed_match": false,
-    "missing_pred": true
+    "exact_match": true,
+    "allowed_match": true,
+    "missing_pred": false
   },
   {
     "store": "emart",
@@ -5584,7 +5584,7 @@
     "receipt_file": "085_emart.json",
     "item_name": "유동 번데기 130g*9",
     "gt_category": "식재료",
-    "pred_category": null,
+    "pred_category": "기타",
     "label_confidence": "ambiguous",
     "allowed_categories": [
       "식재료",
@@ -5592,7 +5592,7 @@
     ],
     "exact_match": false,
     "allowed_match": false,
-    "missing_pred": true
+    "missing_pred": false
   },
   {
     "store": "emart",
@@ -5741,14 +5741,14 @@
     "receipt_file": "086_emart.json",
     "item_name": "비프베이크",
     "gt_category": "간편식",
-    "pred_category": null,
+    "pred_category": "간편식",
     "label_confidence": "clear",
     "allowed_categories": [
       "간편식"
     ],
-    "exact_match": false,
-    "allowed_match": false,
-    "missing_pred": true
+    "exact_match": true,
+    "allowed_match": true,
+    "missing_pred": false
   },
   {
     "store": "emart",
@@ -5811,28 +5811,28 @@
     "receipt_file": "087_emart.json",
     "item_name": "키위",
     "gt_category": "식재료",
-    "pred_category": "식재료",
+    "pred_category": null,
     "label_confidence": "clear",
     "allowed_categories": [
       "식재료"
     ],
-    "exact_match": true,
-    "allowed_match": true,
-    "missing_pred": false
+    "exact_match": false,
+    "allowed_match": false,
+    "missing_pred": true
   },
   {
     "store": "emart",
     "receipt_file": "087_emart.json",
     "item_name": "야채류",
     "gt_category": "식재료",
-    "pred_category": "식재료",
+    "pred_category": null,
     "label_confidence": "clear",
     "allowed_categories": [
       "식재료"
     ],
-    "exact_match": true,
-    "allowed_match": true,
-    "missing_pred": false
+    "exact_match": false,
+    "allowed_match": false,
+    "missing_pred": true
   },
   {
     "store": "emart",
@@ -5869,14 +5869,14 @@
     "receipt_file": "087_emart.json",
     "item_name": "아이스크림",
     "gt_category": "간식",
-    "pred_category": "간식",
+    "pred_category": null,
     "label_confidence": "clear",
     "allowed_categories": [
       "간식"
     ],
-    "exact_match": true,
-    "allowed_match": true,
-    "missing_pred": false
+    "exact_match": false,
+    "allowed_match": false,
+    "missing_pred": true
   },
   {
     "store": "emart",
@@ -5898,14 +5898,14 @@
     "receipt_file": "087_emart.json",
     "item_name": "비닐봉투",
     "gt_category": "생활용품",
-    "pred_category": "생활용품",
+    "pred_category": null,
     "label_confidence": "clear",
     "allowed_categories": [
       "생활용품"
     ],
-    "exact_match": true,
-    "allowed_match": true,
-    "missing_pred": false
+    "exact_match": false,
+    "allowed_match": false,
+    "missing_pred": true
   },
   {
     "store": "emart",
@@ -6319,15 +6319,15 @@
     "receipt_file": "091_emart.json",
     "item_name": "오리온 예감 512g",
     "gt_category": "간식",
-    "pred_category": null,
+    "pred_category": "간식",
     "label_confidence": "ambiguous",
     "allowed_categories": [
       "간식",
       "기타"
     ],
-    "exact_match": false,
-    "allowed_match": false,
-    "missing_pred": true
+    "exact_match": true,
+    "allowed_match": true,
+    "missing_pred": false
   },
   {
     "store": "emart",
@@ -6607,7 +6607,7 @@
     "receipt_file": "093_emart.json",
     "item_name": "노브랜드버터쿠",
     "gt_category": "기타",
-    "pred_category": null,
+    "pred_category": "간식",
     "label_confidence": "unknown",
     "allowed_categories": [
       "기타",
@@ -6615,8 +6615,8 @@
       "식재료"
     ],
     "exact_match": false,
-    "allowed_match": false,
-    "missing_pred": true
+    "allowed_match": true,
+    "missing_pred": false
   },
   {
     "store": "emart",
@@ -6667,14 +6667,14 @@
     "receipt_file": "094_emart.json",
     "item_name": "재사용봉투20L",
     "gt_category": "생활용품",
-    "pred_category": null,
+    "pred_category": "생활용품",
     "label_confidence": "clear",
     "allowed_categories": [
       "생활용품"
     ],
-    "exact_match": false,
-    "allowed_match": false,
-    "missing_pred": true
+    "exact_match": true,
+    "allowed_match": true,
+    "missing_pred": false
   },
   {
     "store": "emart",
@@ -6866,15 +6866,15 @@
     "receipt_file": "095_emart.json",
     "item_name": "닥터페퍼355ml",
     "gt_category": "음료",
-    "pred_category": "음료",
+    "pred_category": null,
     "label_confidence": "ambiguous",
     "allowed_categories": [
       "음료",
       "기타"
     ],
-    "exact_match": true,
-    "allowed_match": true,
-    "missing_pred": false
+    "exact_match": false,
+    "allowed_match": false,
+    "missing_pred": true
   },
   {
     "store": "emart",
@@ -6953,13 +6953,13 @@
     "receipt_file": "096_emart.json",
     "item_name": "농심 사리면 110g*5",
     "gt_category": "식재료",
-    "pred_category": "식재료",
+    "pred_category": "간편식",
     "label_confidence": "ambiguous",
     "allowed_categories": [
       "식재료",
       "간편식"
     ],
-    "exact_match": true,
+    "exact_match": false,
     "allowed_match": true,
     "missing_pred": false
   },
@@ -6984,15 +6984,15 @@
     "receipt_file": "096_emart.json",
     "item_name": "04*(J)무항생제볶음탕용",
     "gt_category": "기타",
-    "pred_category": "식재료",
+    "pred_category": null,
     "label_confidence": "unknown",
     "allowed_categories": [
       "기타",
       "식재료"
     ],
     "exact_match": false,
-    "allowed_match": true,
-    "missing_pred": false
+    "allowed_match": false,
+    "missing_pred": true
   },
   {
     "store": "emart",
@@ -7101,14 +7101,14 @@
     "receipt_file": "099_emart.json",
     "item_name": "농심 무파마탕면 4",
     "gt_category": "간편식",
-    "pred_category": null,
+    "pred_category": "간편식",
     "label_confidence": "clear",
     "allowed_categories": [
       "간편식"
     ],
-    "exact_match": false,
-    "allowed_match": false,
-    "missing_pred": true
+    "exact_match": true,
+    "allowed_match": true,
+    "missing_pred": false
   },
   {
     "store": "emart",
@@ -7129,27 +7129,27 @@
     "receipt_file": "099_emart.json",
     "item_name": "썬연료 1입",
     "gt_category": "기타",
-    "pred_category": null,
+    "pred_category": "기타",
     "label_confidence": "clear",
     "allowed_categories": [
       "기타"
     ],
-    "exact_match": false,
-    "allowed_match": false,
-    "missing_pred": true
+    "exact_match": true,
+    "allowed_match": true,
+    "missing_pred": false
   },
   {
     "store": "emart",
     "receipt_file": "099_emart.json",
     "item_name": "돌스위티오바나나",
     "gt_category": "식재료",
-    "pred_category": "간식",
+    "pred_category": "식재료",
     "label_confidence": "clear",
     "allowed_categories": [
       "식재료"
     ],
-    "exact_match": false,
-    "allowed_match": false,
+    "exact_match": true,
+    "allowed_match": true,
     "missing_pred": false
   },
   {
@@ -7171,14 +7171,14 @@
     "receipt_file": "100_emart.json",
     "item_name": "무항생제알뜰대란30",
     "gt_category": "식재료",
-    "pred_category": null,
+    "pred_category": "식재료",
     "label_confidence": "clear",
     "allowed_categories": [
       "식재료"
     ],
-    "exact_match": false,
-    "allowed_match": false,
-    "missing_pred": true
+    "exact_match": true,
+    "allowed_match": true,
+    "missing_pred": false
   },
   {
     "store": "emart",
