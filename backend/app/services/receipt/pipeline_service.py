@@ -10,7 +10,9 @@ from backend.app.models.receipt.receipt_line import ReceiptLine
 from backend.app.models.receipt.receipt_validation import ReceiptValidation
 from line_sorting import run_line_sorting_for_single_receipt_pages
 from pipeline_runner import run_receipt_pipeline
-
+from llm.category_manager import categorize_receipt_items
+from backend.app.models.receipt.receipt_analysis import ReceiptAnalysis
+from backend.app.models.receipt.receipt_item_category import ReceiptItemCategory
 
 def _build_empty_analysis() -> Dict[str, Any]:
     return {
@@ -136,6 +138,11 @@ def _clear_previous_pipeline_result(db: Session, receipt: Receipt) -> None:
     db.query(ReceiptLine).filter(ReceiptLine.receipt_id == receipt.id).delete()
     db.query(ReceiptItem).filter(ReceiptItem.receipt_id == receipt.id).delete()
     db.query(ReceiptValidation).filter(ReceiptValidation.receipt_id == receipt.id).delete()
+    db.query(ReceiptAnalysis).filter(ReceiptAnalysis.receipt_id == receipt.id).delete()
+    db.flush()
+    db.query(ReceiptLine).filter(ReceiptLine.receipt_id == receipt.id).delete()
+    db.query(ReceiptItem).filter(ReceiptItem.receipt_id == receipt.id).delete()
+    db.query(ReceiptValidation).filter(ReceiptValidation.receipt_id == receipt.id).delete()
     db.flush()
 
 
@@ -155,6 +162,7 @@ def _update_receipt_row(
     receipt.fee_total = receipt_summary.get("fee_total")
 
     receipt.is_valid = validation.get("is_valid", False)
+    receipt.recapture_recommended = validation.get("recapture_recommended", False)
     receipt.is_total_inferred = receipt_summary.get("is_total_inferred", False)
     receipt.requires_user_total_confirmation = receipt_summary.get(
         "requires_user_total_confirmation",
@@ -182,12 +190,17 @@ def _save_receipt_lines(db: Session, receipt_id: int, final_output: dict) -> Non
 
 def _save_receipt_items(db: Session, receipt_id: int, final_output: dict) -> None:
     for item in final_output.get("items", []):
+        category_meta = item.get("category_meta") or {}
+
         row = ReceiptItem(
             receipt_id=receipt_id,
             name=item.get("name") or "",
             normalized_name=item.get("normalized_name"),
             category=item.get("category"),
-            category_source=item.get("category_source"),
+            category_source=(
+                item.get("category_source")
+                or category_meta.get("method")
+            ),
             code=item.get("code"),
             qty=item.get("qty"),
             unit_price=item.get("unit_price"),
@@ -196,7 +209,23 @@ def _save_receipt_items(db: Session, receipt_id: int, final_output: dict) -> Non
             final_price=item.get("final_price"),
             source_line_indices=item.get("source_line_indices"),
         )
+
         db.add(row)
+        db.flush()
+
+        category_row = ReceiptItemCategory(
+            receipt_item_id=row.id,
+            name=item.get("name") or "",
+            category=item.get("category") or "Uncategorized",
+            category_source=category_meta.get("method"),
+            raw_response=category_meta.get("raw_response"),
+            use_fallback=category_meta.get("use_fallback", False),
+            use_llm=category_meta.get("use_llm", True),
+            use_cache=category_meta.get("use_cache", True),
+            cache_hit=category_meta.get("cache_hit", False),
+        )
+
+        db.add(category_row)
 
 
 def _save_receipt_validation(
@@ -222,7 +251,62 @@ def _save_receipt_validation(
     )
     db.add(row)
 
+def _save_receipt_analysis(
+    db: Session,
+    receipt_id: int,
+    final_output: dict,
+) -> None:
+    items = final_output.get("items", [])
 
+    snack_categories = {"간식", "주류", "음료"}
+    home_food_categories = {"식재료"}
+    convenience_categories = {"간편식"}
+
+    guilty_pleasure_amount = 0
+    home_food_amount = 0
+    convenience_food_amount = 0
+    total_final_price = 0
+
+    for item in items:
+        category = item.get("category")
+        final_price = item.get("final_price") or 0
+
+        total_final_price += final_price
+
+        if category in snack_categories:
+            guilty_pleasure_amount += final_price
+
+        if category in home_food_categories:
+            home_food_amount += final_price
+
+        if category in convenience_categories:
+            convenience_food_amount += final_price
+
+    guilty_pleasure_index = (
+        guilty_pleasure_amount / total_final_price
+        if total_final_price > 0
+        else None
+    )
+
+    home_cooking_denominator = home_food_amount + convenience_food_amount
+
+    home_cooking_independence = (
+        home_food_amount / home_cooking_denominator
+        if home_cooking_denominator > 0
+        else None
+    )
+
+    row = ReceiptAnalysis(
+        receipt_id=receipt_id,
+        guilty_pleasure_index=guilty_pleasure_index,
+        home_cooking_independence=home_cooking_independence,
+        guilty_pleasure_amount=guilty_pleasure_amount,
+        home_food_amount=home_food_amount,
+        total_final_price=total_final_price,
+    )
+
+    db.add(row)
+    
 def run_pipeline_for_receipt(db: Session, receipt_id: int) -> dict:
     receipt = (
         db.query(Receipt)
@@ -277,12 +361,23 @@ def run_pipeline_for_receipt(db: Session, receipt_id: int) -> dict:
     parsed_result = pipeline_result["parsed"]
     semantic_result = pipeline_result["semantic"]
     validation_result = pipeline_result["validation"]
-
+    
+    categorized_result = categorize_receipt_items(
+        semantic_receipt=semantic_result,
+        model="gpt-4o-mini",
+        use_llm=True,
+        use_fallback=True,
+        use_cache=True,
+        save_cache=True,
+    )
+    
+    semantic_result = categorized_result
+    
     final_output = _build_final_output(
         parsed_result=parsed_result,
         semantic_result=semantic_result,
         validation_result=validation_result,
-    )
+        )
 
     final_output_path = _save_final_output_json(
         receipt_id=receipt.id,
@@ -309,6 +404,12 @@ def run_pipeline_for_receipt(db: Session, receipt_id: int) -> dict:
     )
 
     _save_receipt_validation(
+        db=db,
+        receipt_id=receipt.id,
+        final_output=final_output,
+    )
+    
+    _save_receipt_analysis(
         db=db,
         receipt_id=receipt.id,
         final_output=final_output,

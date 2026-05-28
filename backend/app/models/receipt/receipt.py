@@ -1,4 +1,6 @@
-from sqlalchemy import Boolean, Column, Integer, String
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, Integer, String
 from sqlalchemy.orm import relationship
 
 from backend.app.db.base_class import Base
@@ -17,10 +19,13 @@ class Receipt(Base):
     fee_total = Column(Integer, nullable=True)
 
     is_valid = Column(Boolean, nullable=False, default=False)
+    recapture_recommended = Column(Boolean, nullable=False, default=False)
     is_total_inferred = Column(Boolean, nullable=False, default=False)
     requires_user_total_confirmation = Column(Boolean, nullable=False, default=False)
 
     status = Column(String, nullable=False, default="uploaded")
+    
+    analyzed_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     # 1:N
     images = relationship(

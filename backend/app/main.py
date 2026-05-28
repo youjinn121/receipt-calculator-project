@@ -10,7 +10,7 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# Base.metadata.create_all(bind=engine)
+Base.metadata.create_all(bind=engine)
 
 app.include_router(receipt_router)
 

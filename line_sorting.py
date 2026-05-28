@@ -17,7 +17,7 @@ MAX_REPASS_VERT = 20
 
 LOCK_AFTER_CONSEC_DOWN = 1
 
-NOISE_TEXTS = {">", ">>", "<<<", ">>>", "<", "<<", ".", "·", "◆", "=", "eve"}
+NOISE_TEXTS = {">", ">>", "<<<", ">>>", "<", "<<", ".", "·", "◆", "=", "eve", "****", "***"}
 
 START_SIM_THRESHOLD = 0.82
 END_SIM_THRESHOLD = 0.82
