@@ -1,0 +1,5 @@
+﻿store,receipt_total,restored_line_count,receipt_with_restored_line_count,restored_item_count,restored_item_valid_count,restored_item_invalid_count,restored_item_validation_pass_rate
+costco,37,3,2,3,3,0,100.0
+emart,24,2,1,2,2,0,100.0
+hanaro,39,4,3,4,4,0,100.0
+ALL,100,9,6,9,9,0,100.0

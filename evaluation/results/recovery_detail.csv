@@ -1,0 +1,10 @@
+﻿receipt_file,store,item_index,item_order,item_name,qty,unit_price,base_price,discount,final_price,source_line_indices,restored_line_indices,restored_fields,restore_reasons,item_validation_result
+005_costco.json,costco,4,5,호주LA갈비2.5K,1,79900,79900,0,79900,[12],[12],"[""qty""]","[""unit_price == price -> qty=1""]",valid
+007_costco.json,costco,0,1,아보카도오일1L,6490,1,6490,0,6490,[7],[7],"[""qty""]","[""qty inferred from price_raw / unit_price""]",valid
+007_costco.json,costco,1,2,하림 닭가슴살,23490,1,23490,0,23490,[34],[34],"[""qty""]","[""qty inferred from price_raw / unit_price""]",valid
+087_emart.json,emart,0,1,403,1,3000,3000,0,3000,[3],[3],"[""name_raw"", ""price_raw"", ""qty"", ""unit_price_raw""]","[""item_detail restored from tail number pattern (unit, qty, total)""]",valid
+087_emart.json,emart,1,2,00026,1,3000,3000,0,3000,[5],[5],"[""name_raw"", ""price_raw"", ""qty"", ""unit_price_raw""]","[""item_detail restored from tail number pattern (unit, qty, total)""]",valid
+041_hanaro.json,hanaro,0,1,양파,1,790,790,0,790,"[0, 1]",[1],"[""unit_price_raw""]","[""unit_price_noise_correction""]",valid
+041_hanaro.json,hanaro,1,2,버섯팽이/3개입/봉,1,16,16,0,16,"[4, 5]",[5],"[""unit_price_raw""]","[""unit_price_noise_correction""]",valid
+043_hanaro.json,hanaro,6,7,롯데) 가나밀크 70G 70G,1,1920,1920,6,1914,"[12, 13, 17]",[17],"[""discount_raw"", ""price_raw""]","[""standalone negative amount parsed as discount_detail""]",valid
+045_hanaro.json,hanaro,0,1,고원판두부 580g 1,1,1800,1800,0,1800,"[6, 7]",[7],"[""qty""]","[""unit_price == price -> qty=1""]",valid

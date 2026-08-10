@@ -1,0 +1,5 @@
+﻿store,receipt_total,semantic_file_found,semantic_file_found_rate,items_generation_success_count,items_generation_success_rate,item_count_match_count,item_count_match_rate,gt_item_total,generated_item_total,required_field_complete_item_total,required_field_completion_rate,core_match_total,core_match_rate_over_gt,qty_match_total,qty_match_rate_over_gt,final_price_match_total,final_price_match_rate_over_gt
+costco,37,37,100.0,37,100.0,31,83.8,447,430,423,98.4,388,86.8,418,93.5,388,86.8
+emart,24,24,100.0,23,95.8,23,95.8,166,162,162,100.0,159,95.8,162,97.6,159,95.8
+hanaro,39,39,100.0,39,100.0,34,87.2,227,218,218,100.0,180,79.3,211,93.0,184,81.1
+ALL,100,100,100.0,99,99.0,88,88.0,840,810,803,99.1,727,86.5,791,94.2,731,87.0

@@ -1,0 +1,5 @@
+﻿store,evaluated_item_count,strict_correct_count,strict_accuracy,allowed_correct_count,allowed_accuracy,uncategorized_count,uncategorized_rate,missing_pred_count,allowed_mismatch_count,real_mismatch_count,effective_error_count,effective_error_rate
+costco,351,279,79.5,317,90.3,0,0.0,7,38,27,34,9.7
+emart,162,127,78.4,144,88.9,0,0.0,0,17,18,18,11.1
+hanaro,174,153,87.9,158,90.8,0,0.0,9,5,7,16,9.2
+ALL,687,559,81.4,619,90.1,0,0.0,16,60,52,68,9.9

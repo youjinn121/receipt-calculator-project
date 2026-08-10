@@ -1,0 +1,5 @@
+﻿store,receipt_total,gt_item_total,generated_item_total,items_generation_success_count,items_generation_success_rate,item_count_match_count,item_count_match_rate,structure_success_total,structure_success_rate
+costco,37,447,430,37,100.0,31,83.8,385,86.1
+emart,24,166,162,23,95.8,23,95.8,151,91.0
+hanaro,39,227,218,39,100.0,34,87.2,178,78.4
+ALL,100,840,810,99,99.0,88,88.0,714,85.0

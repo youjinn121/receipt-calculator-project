@@ -1,0 +1,5 @@
+﻿store,receipt_total,valid_count,invalid_count,validation_pass_rate,checked_item_count,valid_item_count,invalid_item_count,item_validation_success_rate,total_match_true,total_match_false,total_match_none,total_match_rate_all_receipts,total_match_rate_known_only,inferred_total_count,recapture_recommended_count
+costco,37,30,7,81.1,430,424,6,98.6,27,6,4,73.0,81.8,4,7
+emart,24,24,0,100.0,162,162,0,100.0,11,0,13,45.8,100.0,12,0
+hanaro,39,31,8,79.5,218,218,0,100.0,31,8,0,79.5,79.5,0,5
+ALL,100,85,15,85.0,810,804,6,99.3,69,14,17,69.0,83.1,16,12

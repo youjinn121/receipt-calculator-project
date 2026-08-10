@@ -1,0 +1,12 @@
+﻿store,restore_reason,count
+costco,qty inferred from price_raw / unit_price,2
+costco,unit_price == price -> qty=1,1
+emart,"item_detail restored from tail number pattern (unit, qty, total)",2
+hanaro,unit_price_noise_correction,2
+hanaro,standalone negative amount parsed as discount_detail,1
+hanaro,unit_price == price -> qty=1,1
+ALL,unit_price == price -> qty=1,2
+ALL,qty inferred from price_raw / unit_price,2
+ALL,"item_detail restored from tail number pattern (unit, qty, total)",2
+ALL,unit_price_noise_correction,2
+ALL,standalone negative amount parsed as discount_detail,1

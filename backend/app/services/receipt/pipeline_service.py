@@ -8,7 +8,7 @@ from backend.app.models.receipt.receipt import Receipt
 from backend.app.models.receipt.receipt_item import ReceiptItem
 from backend.app.models.receipt.receipt_line import ReceiptLine
 from backend.app.models.receipt.receipt_validation import ReceiptValidation
-from line_sorting import run_line_sorting_for_single_receipt_pages
+from ocr_preprocess.line_sorting import run_line_sorting_for_single_receipt_pages
 from pipeline_runner import run_receipt_pipeline
 from llm.category_manager import categorize_receipt_items
 from backend.app.models.receipt.receipt_analysis import ReceiptAnalysis

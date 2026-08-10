@@ -1,0 +1,15 @@
+﻿store,restored_field,count
+costco,qty,3
+emart,name_raw,2
+emart,unit_price_raw,2
+emart,qty,2
+emart,price_raw,2
+hanaro,unit_price_raw,2
+hanaro,discount_raw,1
+hanaro,price_raw,1
+hanaro,qty,1
+ALL,qty,6
+ALL,unit_price_raw,4
+ALL,price_raw,3
+ALL,name_raw,2
+ALL,discount_raw,1

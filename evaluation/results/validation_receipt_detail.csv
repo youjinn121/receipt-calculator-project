@@ -1,0 +1,101 @@
+﻿receipt_file,store,is_valid,checked_item_count,valid_item_count,invalid_item_count,total_match,subtotal_segment_match,is_total_inferred,requires_user_total_confirmation,recapture_recommended,recapture_reasons,computed_final_price_sum,receipt_total,receipt_total_source
+001_costco.json,costco,True,5,5,0,True,True,False,False,False,[],69640,69640,subtotal_last_amount
+002_costco.json,costco,True,8,8,0,True,True,False,False,False,[],287920,287920,subtotal_last_amount
+003_costco.json,costco,False,2,1,1,False,False,False,False,True,"[""item_core_value_missing"", ""receipt_total_mismatch"", ""item_qty_sum_mismatch"", ""subtotal_segment_mismatch""]",14790,26780,subtotal_last_amount
+004_costco.json,costco,True,8,8,0,,,True,True,False,"[""receipt_total_missing""]",185940,185940,inferred:sum(item.final_price)
+005_costco.json,costco,True,5,5,0,True,True,False,False,False,[],293680,293680,total_lines_last_price_raw
+006_costco.json,costco,True,5,5,0,True,True,False,False,False,[],72350,72350,total_lines_last_price_raw
+007_costco.json,costco,False,3,2,1,,,True,True,True,"[""item_core_value_missing"", ""receipt_total_missing""]",29980,29980,inferred:sum(item.final_price)
+008_costco.json,costco,True,8,8,0,True,True,False,False,False,[],132720,132720,total_lines_last_price_raw
+009_costco.json,costco,True,5,5,0,True,True,False,False,False,[],283180,283180,subtotal_last_amount
+010_costco.json,costco,True,5,5,0,,,True,True,False,"[""receipt_total_missing""]",87560,87560,inferred:sum(item.final_price)
+011_costco.json,costco,True,3,3,0,True,True,False,False,False,[],78060,78060,subtotal_last_amount
+012_costco.json,costco,True,2,2,0,True,,False,False,False,[],20980,20980,total_lines_last_price_raw
+013_costco.json,costco,True,21,21,0,True,True,False,False,False,[],405890,405890,subtotal_last_amount
+014_costco.json,costco,True,14,14,0,True,True,False,False,False,[],209060,209060,total_lines_last_price_raw
+015_costco.json,costco,True,10,10,0,True,True,False,False,False,[],157010,157010,total_lines_last_price_raw
+016_costco.json,costco,True,13,13,0,True,True,False,False,False,[],221860,221860,total_lines_last_price_raw
+017_costco.json,costco,True,13,13,0,True,True,False,False,False,[],175170,175170,total_lines_last_price_raw
+018_costco.json,costco,True,9,9,0,True,True,False,False,False,[],149590,149590,total_lines_last_price_raw
+019_costco.json,costco,True,13,13,0,True,True,False,False,False,[],202570,202570,total_lines_last_price_raw
+020_costco.json,costco,True,24,24,0,True,True,False,False,False,[],317360,317360,total_lines_last_price_raw
+021_costco.json,costco,True,13,13,0,True,True,False,False,False,"[""item_qty_sum_mismatch""]",278880,278880,total_lines_last_price_raw
+022_costco.json,costco,False,14,14,0,False,,False,False,False,"[""receipt_total_mismatch""]",198160,195460,total_lines_last_price_raw
+023_costco.json,costco,True,14,14,0,True,True,False,False,False,[],212140,212140,total_lines_last_price_raw
+024_costco.json,costco,False,14,14,0,False,True,False,False,True,"[""receipt_total_mismatch"", ""item_qty_sum_mismatch""]",160960,5,total_lines_last_price_raw
+025_costco.json,costco,False,14,13,1,False,True,False,False,True,"[""item_core_value_missing"", ""receipt_total_mismatch"", ""item_qty_sum_mismatch""]",171270,181060,total_lines_last_price_raw
+026_costco.json,costco,True,19,19,0,True,True,False,False,False,[],354680,354680,total_lines_last_price_raw
+027_costco.json,costco,True,18,18,0,True,True,False,False,False,[],437540,437540,total_lines_last_price_raw
+028_costco.json,costco,True,11,11,0,True,True,False,False,False,[],202750,202750,total_lines_last_price_raw
+029_costco.json,costco,True,13,13,0,True,True,False,False,False,[],246360,246360,total_lines_last_price_raw
+030_costco.json,costco,False,21,20,1,False,True,False,False,True,"[""item_core_value_missing"", ""receipt_total_mismatch""]",392140,389540,total_lines_last_price_raw
+031_costco.json,costco,True,17,17,0,True,True,False,False,False,[],310480,310480,total_lines_last_price_raw
+032_costco.json,costco,True,17,17,0,True,True,False,False,False,[],310480,310480,total_lines_last_price_raw
+033_costco.json,costco,False,18,16,2,False,False,False,False,True,"[""item_core_value_missing"", ""receipt_total_mismatch"", ""item_qty_sum_mismatch"", ""subtotal_segment_mismatch""]",521550,574330,total_lines_last_price_raw
+034_costco.json,costco,True,10,10,0,True,True,False,False,False,[],253590,253590,total_lines_last_price_raw
+035_costco.json,costco,True,15,15,0,,False,True,True,True,"[""item_qty_sum_mismatch"", ""subtotal_segment_mismatch"", ""receipt_total_missing""]",215130,215130,inferred:sum(item.final_price)
+036_costco.json,costco,True,13,13,0,True,True,False,False,False,[],196350,196350,total_lines_last_price_raw
+037_costco.json,costco,True,13,13,0,True,True,False,False,False,[],263880,263880,total_lines_last_price_raw
+077_emart.json,emart,True,10,10,0,True,,False,False,False,[],34800,34800,tail_info.summary.payment_total
+078_emart.json,emart,True,3,3,0,True,,False,False,False,[],17440,17440,tail_info.summary.payment_total
+079_emart.json,emart,True,3,3,0,True,,False,False,False,[],13240,13240,tail_info.summary.payment_total
+080_emart.json,emart,True,4,4,0,True,,False,False,False,[],8390,8390,tail_info.summary.payment_total
+081_emart.json,emart,True,1,1,0,,,True,True,False,"[""payment_total_missing""]",13660,13660,inferred:item_total
+082_emart.json,emart,True,7,7,0,True,,False,False,False,[],19540,19540,tail_info.summary.payment_total
+083_emart.json,emart,True,15,15,0,,,True,True,False,"[""payment_total_missing""]",34460,34460,inferred:sum(item.final_price)
+084_emart.json,emart,True,3,3,0,,,True,True,False,"[""payment_total_missing""]",12220,12220,inferred:sum(item.final_price)
+085_emart.json,emart,True,11,11,0,True,,False,False,False,[],142380,142380,tail_info.summary.payment_total
+086_emart.json,emart,True,5,5,0,,,True,True,False,"[""payment_total_missing""]",11500,11500,inferred:item_total
+087_emart.json,emart,True,11,11,0,,,True,True,False,"[""payment_total_missing""]",22120,22120,inferred:item_total
+088_emart.json,emart,True,9,9,0,,,True,True,False,"[""payment_total_missing""]",71530,71530,inferred:item_total
+089_emart.json,emart,True,8,8,0,True,,False,False,False,[],27580,27580,tail_info.summary.payment_total
+090_emart.json,emart,True,7,7,0,True,,False,False,False,[],22890,20890,tail_info.summary.payment_total
+091_emart.json,emart,True,13,13,0,,,True,True,False,"[""payment_total_missing""]",52000,52000,inferred:item_total
+092_emart.json,emart,True,7,7,0,True,,False,False,False,[],38420,38420,tail_info.summary.payment_total
+093_emart.json,emart,True,4,4,0,,,True,True,False,"[""payment_total_missing""]",11520,11520,inferred:item_total
+094_emart.json,emart,True,8,8,0,,,True,True,False,"[""payment_total_missing""]",54500,54500,inferred:item_total
+095_emart.json,emart,True,11,11,0,,,True,True,False,"[""payment_total_missing""]",67090,67090,inferred:item_total
+096_emart.json,emart,True,5,5,0,True,,False,False,False,[],25500,25500,tail_info.summary.payment_total
+097_emart.json,emart,True,6,6,0,True,,False,False,False,[],24220,24220,tail_info.summary.payment_total
+098_emart.json,emart,True,0,0,0,,,True,True,False,"[""payment_total_missing""]",0,0,inferred:sum(item.final_price)
+099_emart.json,emart,True,5,5,0,,,False,False,False,[],44030,34720,tail_info.summary.payment_total
+100_emart.json,emart,True,6,6,0,,,True,True,False,"[""payment_total_missing""]",26900,26900,inferred:item_total
+038_hanaro.json,hanaro,True,3,3,0,True,,False,False,False,[],16052,16050,tail_info.summary.payment_total
+039_hanaro.json,hanaro,True,4,4,0,True,,False,False,False,[],41400,41400,tail_info.summary.payment_total
+040_hanaro.json,hanaro,True,5,5,0,True,,False,False,False,[],21720,21720,tail_info.summary.payment_total
+041_hanaro.json,hanaro,False,2,2,0,False,,False,False,True,"[""item_total_mismatch"", ""payment_total_mismatch""]",806,13300,tail_info.summary.payment_total
+042_hanaro.json,hanaro,True,4,4,0,True,,False,False,False,[],27600,27600,tail_info.summary.payment_total
+043_hanaro.json,hanaro,False,7,7,0,False,,False,False,False,"[""payment_total_mismatch""]",21510,21510,tail_info.summary.payment_total
+044_hanaro.json,hanaro,False,15,15,0,False,,False,False,True,"[""item_total_mismatch"", ""payment_total_mismatch"", ""item_price_mismatch""]",45401,55400,tail_info.summary.payment_total
+045_hanaro.json,hanaro,False,7,7,0,False,,False,False,True,"[""item_total_mismatch"", ""payment_total_mismatch"", ""item_price_mismatch""]",15413,38520,tail_info.summary.payment_total
+046_hanaro.json,hanaro,True,5,5,0,True,,False,False,False,[],26900,26900,tail_info.summary.payment_total
+047_hanaro.json,hanaro,True,6,6,0,True,,False,False,False,[],49540,49540,tail_info.summary.payment_total
+048_hanaro.json,hanaro,True,6,6,0,True,,False,False,False,[],31405,31400,tail_info.summary.payment_total
+049_hanaro.json,hanaro,True,6,6,0,True,,False,False,False,[],20912,20910,tail_info.summary.payment_total
+050_hanaro.json,hanaro,True,1,1,0,True,,False,False,False,[],12900,9900,tail_info.summary.payment_total
+051_hanaro.json,hanaro,True,2,2,0,True,,False,False,False,[],4600,4600,tail_info.summary.payment_total
+052_hanaro.json,hanaro,True,10,10,0,True,,False,False,False,[],70694,70690,tail_info.summary.payment_total
+053_hanaro.json,hanaro,True,1,1,0,True,,False,False,False,[],7680,7680,tail_info.summary.payment_total
+054_hanaro.json,hanaro,True,6,6,0,True,,False,False,False,[],29980,29980,tail_info.summary.payment_total
+055_hanaro.json,hanaro,True,15,15,0,True,,False,False,False,[],102660,102660,tail_info.summary.payment_total
+056_hanaro.json,hanaro,True,4,4,0,True,,False,False,False,[],10800,10800,tail_info.summary.payment_total
+057_hanaro.json,hanaro,True,1,1,0,True,,False,False,False,[],9980,9980,tail_info.summary.payment_total
+058_hanaro.json,hanaro,True,2,2,0,True,,False,False,False,[],19254,19250,tail_info.summary.payment_total
+059_hanaro.json,hanaro,True,4,4,0,True,,False,False,False,[],6960,6960,tail_info.summary.payment_total
+060_hanaro.json,hanaro,True,6,6,0,True,,False,False,False,[],39300,39300,tail_info.summary.payment_total
+061_hanaro.json,hanaro,True,7,7,0,True,,False,False,False,[],47340,47340,tail_info.summary.payment_total
+062_hanaro.json,hanaro,True,9,9,0,True,,False,False,False,[],25070,25070,tail_info.summary.payment_total
+063_hanaro.json,hanaro,True,11,11,0,True,,False,False,False,[],73176,73170,tail_info.summary.payment_total
+064_hanaro.json,hanaro,True,10,10,0,True,,False,False,False,[],39335,39330,tail_info.summary.payment_total
+065_hanaro.json,hanaro,False,5,5,0,False,,False,False,True,"[""item_total_mismatch"", ""payment_total_mismatch""]",14705,15260,tail_info.summary.payment_total
+066_hanaro.json,hanaro,True,10,10,0,True,,False,False,False,[],37440,37440,tail_info.summary.payment_total
+067_hanaro.json,hanaro,True,4,4,0,True,,False,False,False,[],19440,19440,tail_info.summary.payment_total
+068_hanaro.json,hanaro,True,4,4,0,True,,False,False,False,[],26070,26070,tail_info.summary.payment_total
+069_hanaro.json,hanaro,True,3,3,0,True,,False,False,False,[],15810,15810,tail_info.summary.payment_total
+070_hanaro.json,hanaro,True,8,8,0,True,,False,False,False,[],37416,37410,tail_info.summary.payment_total
+071_hanaro.json,hanaro,False,9,9,0,False,,False,False,False,"[""payment_total_mismatch""]",32480,32480,tail_info.summary.payment_total
+072_hanaro.json,hanaro,True,1,1,0,True,,False,False,False,[],10800,10800,tail_info.summary.payment_total
+073_hanaro.json,hanaro,False,6,6,0,False,,False,False,True,"[""item_total_mismatch"", ""payment_total_mismatch""]",22666,30550,tail_info.summary.payment_total
+074_hanaro.json,hanaro,True,3,3,0,True,,False,False,False,[],9520,9520,tail_info.summary.payment_total
+075_hanaro.json,hanaro,True,4,4,0,True,,False,False,False,[],17680,17680,tail_info.summary.payment_total
+076_hanaro.json,hanaro,False,2,2,0,False,,False,False,False,"[""payment_total_mismatch""]",13360,13360,tail_info.summary.payment_total

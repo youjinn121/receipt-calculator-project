@@ -1,0 +1,62 @@
+[
+  {
+    "store": "costco",
+    "evaluated_item_count": 351,
+    "strict_correct_count": 279,
+    "strict_accuracy": 79.5,
+    "allowed_correct_count": 317,
+    "allowed_accuracy": 90.3,
+    "uncategorized_count": 0,
+    "uncategorized_rate": 0.0,
+    "missing_pred_count": 7,
+    "allowed_mismatch_count": 38,
+    "real_mismatch_count": 27,
+    "effective_error_count": 34,
+    "effective_error_rate": 9.7
+  },
+  {
+    "store": "emart",
+    "evaluated_item_count": 162,
+    "strict_correct_count": 127,
+    "strict_accuracy": 78.4,
+    "allowed_correct_count": 144,
+    "allowed_accuracy": 88.9,
+    "uncategorized_count": 0,
+    "uncategorized_rate": 0.0,
+    "missing_pred_count": 0,
+    "allowed_mismatch_count": 17,
+    "real_mismatch_count": 18,
+    "effective_error_count": 18,
+    "effective_error_rate": 11.1
+  },
+  {
+    "store": "hanaro",
+    "evaluated_item_count": 174,
+    "strict_correct_count": 153,
+    "strict_accuracy": 87.9,
+    "allowed_correct_count": 158,
+    "allowed_accuracy": 90.8,
+    "uncategorized_count": 0,
+    "uncategorized_rate": 0.0,
+    "missing_pred_count": 9,
+    "allowed_mismatch_count": 5,
+    "real_mismatch_count": 7,
+    "effective_error_count": 16,
+    "effective_error_rate": 9.2
+  },
+  {
+    "store": "ALL",
+    "evaluated_item_count": 687,
+    "strict_correct_count": 559,
+    "strict_accuracy": 81.4,
+    "allowed_correct_count": 619,
+    "allowed_accuracy": 90.1,
+    "uncategorized_count": 0,
+    "uncategorized_rate": 0.0,
+    "missing_pred_count": 16,
+    "allowed_mismatch_count": 60,
+    "real_mismatch_count": 52,
+    "effective_error_count": 68,
+    "effective_error_rate": 9.9
+  }
+]
