@@ -92,7 +92,7 @@ Receipt Object
 
 ```text
 receipt-calculator-project/
-├── app/                     # Android 클라이언트 앱 모듈
+├── frontend/                # Android 클라이언트 앱 모듈
 ├── backend/                 # FastAPI 기반 API 및 DB 연동
 ├── ocr_preprocess/          # OCR bounding box 기반 라인 정렬 및 위치 보정
 ├── receipt_parser/          # Line type 분류 및 핵심 필드 추출
@@ -102,12 +102,6 @@ receipt-calculator-project/
 ├── evaluation/              # 파이프라인 단계별 성능 평가
 │   └── results/             # 최종 평가 결과 CSV/JSON
 ├── data/                    # 단계별 입출력 데이터
-├── gradle/                  # Gradle Wrapper 관련 파일
-├── build.gradle.kts         # 루트 Gradle 빌드 설정
-├── settings.gradle.kts      # Gradle 프로젝트 및 모듈 설정
-├── gradle.properties        # Gradle 빌드 옵션
-├── gradlew                  # Gradle Wrapper 실행 파일
-├── gradlew.bat              # Windows용 Gradle Wrapper 실행 파일
 ├── run_pipeline.py          # Parser ~ Validation 배치 실행
 ├── run_llm_category.py      # LLM Category 정규화 실행
 └── pipeline_runner.py       # Backend 연동용 단일 영수증 처리 모듈
